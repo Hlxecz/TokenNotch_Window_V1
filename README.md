@@ -19,12 +19,20 @@
 
 ## 빌드 & 실행
 
+개발 중 실행:
+
 ```bash
-dotnet build -c Release
+dotnet run -c Release
 ```
 
-빌드 후 `bin/Release/net9.0-windows/TokenNotchWin.exe`를 실행하면 작업표시줄 위에 캐릭터가 나타납니다.
-Dock/작업표시줄 버튼 없이 트레이 아이콘만 생깁니다.
+배포용 단일 실행 파일 만들기 (.NET 런타임 없는 PC에서도 실행됨, 약 71MB):
+
+```bash
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o dist
+```
+
+생성된 `dist/TokenNotchWin.exe` 하나만 있으면 어디서든 더블클릭으로 실행됩니다.
+작업표시줄 버튼 없이 트레이 아이콘만 생깁니다.
 
 ## 조작
 

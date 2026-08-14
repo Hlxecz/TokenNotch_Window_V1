@@ -1,7 +1,6 @@
 using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Windows;
 using System.Windows.Forms;
 using Application = System.Windows.Application;
@@ -46,9 +45,7 @@ public partial class App : Application
 
         _tray = new NotifyIcon
         {
-            // ApplicationIcon embeds app.ico into the exe itself, so the tray
-            // and the exe/taskbar always show the same icon from one source.
-            Icon = Icon.ExtractAssociatedIcon(Assembly.GetExecutingAssembly().Location) ?? SystemIcons.Application,
+            Icon = LoadTrayIcon(),
             Text = "TokenNotch",
             Visible = true,
             ContextMenuStrip = menu,
@@ -57,6 +54,16 @@ public partial class App : Application
         _tray.DoubleClick += (_, _) => _window.SetHidden(false);
 
         SyncMenu();
+    }
+
+    /// Reads app.ico out of the WPF resource stream rather than off disk:
+    /// Assembly.Location is empty in a single-file publish, so anything
+    /// path-based silently falls back to the generic system icon there.
+    private static Icon LoadTrayIcon()
+    {
+        var uri = new Uri("pack://application:,,,/Resources/app.ico", UriKind.Absolute);
+        using var stream = GetResourceStream(uri)?.Stream;
+        return stream is null ? SystemIcons.Application : new Icon(stream);
     }
 
     private void SyncMenu()

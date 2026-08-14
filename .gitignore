@@ -1,6 +1,7 @@
 # Build output
 bin/
 obj/
+dist/
 .vs/
 *.user
 *.suo
