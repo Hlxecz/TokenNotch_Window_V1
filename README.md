@@ -94,6 +94,17 @@ TOKENNOTCH_MOOD=happy ./bin/Release/net9.0-windows/TokenNotchWin.exe
 Clawd 스프라이트는 원본과 동일하게 Claude Code CLI에 내장된 쿼드런트 블록 아트
 (`▛▜▙▟`)를 2×2 픽셀 격자로 디코딩해 재현하며, 색상도 CLI 테마값 rgb(215,119,87)을 그대로 씁니다.
 
+## 프로젝트 구조
+
+```
+App.xaml(.cs)          앱 진입점, 트레이 아이콘
+MainWindow.xaml(.cs)   창 배치, 드래그/순찰/휴식 상태 머신, 확장 패널
+Controls/              캐릭터 렌더링 (Clawd, Codex 봇, 스프라이트 데이터)
+Services/              사용량 API 호출, 설정 저장, 무드/뷰모델
+Tools/                 IconGen — 트레이 아이콘(.ico) 굽는 1회성 도구
+Resources/             app.ico
+```
+
 ## 라이선스
 
 MIT — 원본 TokenNotch(© Borel)의 저작권 표시를 유지합니다. [LICENSE](LICENSE) 참고.
