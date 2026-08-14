@@ -35,6 +35,10 @@ public sealed class ClawdControl : FrameworkElement
         DependencyProperty.Register(nameof(NeglectFraction), typeof(double), typeof(ClawdControl),
             new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
 
+    public static readonly DependencyProperty ClosingProgressProperty =
+        DependencyProperty.Register(nameof(ClosingProgress), typeof(double), typeof(ClawdControl),
+            new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
+
     public Mood Mood
     {
         get => (Mood)GetValue(MoodProperty);
@@ -76,6 +80,15 @@ public sealed class ClawdControl : FrameworkElement
     {
         get => (double)GetValue(NeglectFractionProperty);
         set => SetValue(NeglectFractionProperty, value);
+    }
+
+    /// 0 while lounging, sweeping to 1 as the parasol furls and Clawd stands
+    /// back up. Runs with Resting still true so the sit-to-stand handoff has
+    /// something to animate; the host drops Resting once this reaches 1.
+    public double ClosingProgress
+    {
+        get => (double)GetValue(ClosingProgressProperty);
+        set => SetValue(ClosingProgressProperty, value);
     }
 
     /// Seconds since the widget started; the host advances this each frame.
@@ -127,9 +140,10 @@ public sealed class ClawdControl : FrameworkElement
         var originX = (RenderSize.Width - SpriteWidth) / 2;
         var standY = RenderSize.Height - SpriteHeight - Bob(t);
         // Feet are hidden while lounging, so drop the body by exactly their
-        // height — otherwise the tucked-in crab appears to hover.
+        // height — otherwise the tucked-in crab appears to hover. Standing
+        // back up lifts it in step with the parasol furling.
         var feetHeight = SpriteHeight * 2 / 6;
-        var originY = Resting ? standY + feetHeight : standY;
+        var originY = Resting ? standY + feetHeight * (1 - Ease(ClosingProgress)) : standY;
         var groundY = standY + SpriteHeight;
 
         if (!Grabbed) DrawShadow(dc, t);
@@ -171,8 +185,9 @@ public sealed class ClawdControl : FrameworkElement
         for (var row = 0; row < ClawdSprite.GridHeight; row++)
         {
             // Feet tucked under while lounging — no legs showing reads as
-            // "sitting down" far more clearly than any change of pose.
-            if (Resting && row >= 4) continue;
+            // "sitting down" far more clearly than any change of pose. They
+            // pop back out midway through standing up.
+            if (Resting && row >= 4 && ClosingProgress < 0.55) continue;
 
             // The last sprite row is Clawd's feet — kicking them out of step
             // with the claws is what sells "held up in the air".
@@ -274,11 +289,19 @@ public sealed class ClawdControl : FrameworkElement
         var unit = Scale / 3;
         var stakeX = originX + SpriteWidth * 0.06;
         var poleLength = SpriteHeight * 1.02;
-        var radius = SpriteWidth * 0.52;
+
+        // Furling collapses the canopy's half-angle toward vertical while the
+        // radius barely shrinks, so the panels gather into a closed bundle
+        // along the pole rather than just scaling away.
+        var close = Ease(ClosingProgress);
+        var radius = SpriteWidth * 0.52 * (1 - close * 0.28);
+        var spreadDeg = 180.0 * (1 - close * 0.93);
 
         // Positive angle tips the canopy clockwise — i.e. to the right, over
-        // the crab sitting beside the stake.
-        dc.PushTransform(new RotateTransform(16 + Math.Sin(t * 0.7) * 2.0, stakeX, groundY));
+        // the crab sitting beside the stake. As it furls it also swings
+        // upright, the way you'd lift a parasol off your shoulder.
+        var tilt = (16 + Math.Sin(t * 0.7) * 2.0) * (1 - close);
+        dc.PushTransform(new RotateTransform(tilt, stakeX, groundY));
 
         var poleTopY = groundY - poleLength;
         dc.DrawRectangle(PoleBrush, null,
@@ -286,18 +309,35 @@ public sealed class ClawdControl : FrameworkElement
 
         var center = new Point(stakeX, poleTopY);
         const int panels = 6;
+        // Sweep stays centred on straight-up (270°) so the bundle closes
+        // symmetrically instead of collapsing to one side.
+        var startDeg = 270 - spreadDeg / 2;
         for (var i = 0; i < panels; i++)
         {
             dc.DrawGeometry(i % 2 == 0 ? ParasolRed : ParasolCream, null,
-                Wedge(center, radius, 180 + i * (180.0 / panels), 180.0 / panels));
+                Wedge(center, radius, startDeg + i * (spreadDeg / panels), spreadDeg / panels));
         }
 
-        // Knob at the apex, and a soft rim line so the dome has an edge.
+        // Knob at the apex, and a soft rim line so the dome has an edge. The
+        // rim fades out as the canopy furls — a closed parasol has no brim.
         dc.DrawEllipse(PoleBrush, null, new Point(stakeX, poleTopY - radius - 0.6 * unit), 1.2 * unit, 1.6 * unit);
-        dc.DrawLine(new Pen(new SolidColorBrush(Color.FromArgb(45, 0, 0, 0)), 1.0 * unit),
-            new Point(stakeX - radius, poleTopY), new Point(stakeX + radius, poleTopY));
+        if (close < 0.85)
+        {
+            var rim = new Pen(new SolidColorBrush(Color.FromArgb((byte)(45 * (1 - close / 0.85)), 0, 0, 0)), 1.0 * unit);
+            rim.Freeze();
+            var halfRim = radius * Math.Sin(spreadDeg / 2 * Math.PI / 180);
+            dc.DrawLine(rim, new Point(stakeX - halfRim, poleTopY), new Point(stakeX + halfRim, poleTopY));
+        }
 
         dc.Pop();
+    }
+
+    /// Smoothstep — the furl should start and finish gently rather than
+    /// snapping at either end.
+    private static double Ease(double x)
+    {
+        x = Math.Clamp(x, 0, 1);
+        return x * x * (3 - 2 * x);
     }
 
     /// Pie slice of the canopy: 180°–360° sweeps over the top, since Y grows

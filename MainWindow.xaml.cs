@@ -31,10 +31,13 @@ public partial class MainWindow : Window
     private double _pauseUntil;
     private double _lastFrameTime;
 
+    private const double StandUpSeconds = 0.55; // parasol furls / Clawd gets up
+
     private bool _expanded;
     private bool _grabbed;
     private bool _falling;
     private bool _resting;
+    private double _closing; // 0..1 through the stand-up animation
     private double _fallVelocity;
     private double _grabDx, _grabDy;
     private double _lastInteraction;
@@ -91,7 +94,9 @@ public partial class MainWindow : Window
         _grabbed = true;
         _falling = false;
         _fallVelocity = 0;
-        SetResting(false);
+        // Being yanked into the air skips the polite stand-up entirely.
+        _resting = false;
+        _closing = 0;
         _lastInteraction = _clock.Elapsed.TotalSeconds;
 
         SetExpanded(false);
@@ -152,10 +157,10 @@ public partial class MainWindow : Window
         if (!_grabbed && !_falling && !_settings.Locked && idle > IdleRestSeconds)
             SetResting(true);
 
-        // Keeps sitting there long enough and it starts to tan toward black —
-        // grabbing it or even just hovering resets _lastInteraction, which
-        // snaps this back to 0 the very next frame.
-        var neglect = _resting
+        // Keeps sitting there long enough and it starts to tan toward black.
+        // Grabbing or hovering resets _lastInteraction and starts the furl,
+        // either of which snaps the colour back on the very next frame.
+        var neglect = _resting && _closing <= 0
             ? Math.Clamp((idle - IdleRestSeconds - NeglectGraceSeconds) / NeglectSpanSeconds, 0, 1)
             : 0;
 
@@ -164,8 +169,11 @@ public partial class MainWindow : Window
         Clawd.FacingRight = _direction > 0;
         Clawd.Grabbed = _grabbed;
         Clawd.Resting = _resting;
+        Clawd.ClosingProgress = _closing;
         Clawd.NeglectFraction = neglect;
         Clawd.InvalidateVisual();
+
+        AdvanceClosing(dt);
 
         if (_expanded)
         {
@@ -186,11 +194,39 @@ public partial class MainWindow : Window
 
     /// The parasol needs vertical room the walking states don't, so settling
     /// down and getting back up both have to resize the window.
+    ///
+    /// Standing up isn't instant: Resting stays true while _closing sweeps to
+    /// 1 so the furl has something to animate against, and only then does the
+    /// state actually flip. Sitting down is immediate.
     private void SetResting(bool resting)
     {
-        if (_resting == resting) return;
-        _resting = resting;
-        ApplyWindowHeight();
+        if (resting)
+        {
+            if (_resting) return;
+            _resting = true;
+            _closing = 0;
+            ApplyWindowHeight();
+            return;
+        }
+
+        // Already up, or already on the way up — don't restart the furl.
+        if (!_resting || _closing > 0) return;
+        _closing = double.Epsilon; // nonzero marks "closing in progress"
+    }
+
+    /// Advances the furl; when it completes, Resting finally drops and the
+    /// window shrinks back to walking height.
+    private void AdvanceClosing(double dt)
+    {
+        if (!_resting || _closing <= 0) return;
+
+        _closing = Math.Min(1, _closing + dt / StandUpSeconds);
+        if (_closing >= 1)
+        {
+            _resting = false;
+            _closing = 0;
+            ApplyWindowHeight();
+        }
     }
 
     /// Polled rather than driven by MouseEnter/MouseLeave: after a drag ends
@@ -254,6 +290,8 @@ public partial class MainWindow : Window
     /// under the pointer.
     private void Walk(double t, double dt)
     {
+        // _resting covers the stand-up too, so no walking until the parasol
+        // is fully furled.
         if (_settings.Locked || _resting || _expanded || _model.ClaudeMood == Mood.Sleeping || t < _pauseUntil) return;
 
         var speed = _model.ClaudeMood switch
