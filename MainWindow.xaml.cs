@@ -15,6 +15,8 @@ public partial class MainWindow : Window
     private const double RestingHeight = 155; // headroom for the parasol
     private const double Gravity = 2600;
     private const double IdleRestSeconds = 18; // no interaction for this long -> sits down
+    private const double NeglectGraceSeconds = 60; // sitting calmly this long before it starts to "tan"
+    private const double NeglectSpanSeconds = 20 * 60; // roughly four 5-min poll cycles to reach "please touch me"
 
     private readonly UsageViewModel _model = new();
     private readonly Settings _settings = Settings.Load();
@@ -146,14 +148,23 @@ public partial class MainWindow : Window
 
         // Only counts down while it's free to wander — being locked or mid-
         // fall shouldn't quietly arm a rest the moment either one ends.
-        if (!_grabbed && !_falling && !_settings.Locked && t - _lastInteraction > IdleRestSeconds)
+        var idle = t - _lastInteraction;
+        if (!_grabbed && !_falling && !_settings.Locked && idle > IdleRestSeconds)
             SetResting(true);
+
+        // Keeps sitting there long enough and it starts to tan toward black —
+        // grabbing it or even just hovering resets _lastInteraction, which
+        // snaps this back to 0 the very next frame.
+        var neglect = _resting
+            ? Math.Clamp((idle - IdleRestSeconds - NeglectGraceSeconds) / NeglectSpanSeconds, 0, 1)
+            : 0;
 
         Clawd.Time = t;
         Clawd.Mood = _model.ClaudeMood;
         Clawd.FacingRight = _direction > 0;
         Clawd.Grabbed = _grabbed;
         Clawd.Resting = _resting;
+        Clawd.NeglectFraction = neglect;
         Clawd.InvalidateVisual();
 
         if (_expanded)

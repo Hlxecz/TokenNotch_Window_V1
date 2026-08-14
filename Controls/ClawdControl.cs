@@ -31,6 +31,10 @@ public sealed class ClawdControl : FrameworkElement
         DependencyProperty.Register(nameof(Resting), typeof(bool), typeof(ClawdControl),
             new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
 
+    public static readonly DependencyProperty NeglectFractionProperty =
+        DependencyProperty.Register(nameof(NeglectFraction), typeof(double), typeof(ClawdControl),
+            new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
+
     public Mood Mood
     {
         get => (Mood)GetValue(MoodProperty);
@@ -65,6 +69,15 @@ public sealed class ClawdControl : FrameworkElement
         set => SetValue(RestingProperty, value);
     }
 
+    /// 0 at "just sat down", climbing toward (but never reaching) 1 the
+    /// longer Resting goes uninterrupted — the host owns the clock and just
+    /// hands over how neglected Clawd should look this frame.
+    public double NeglectFraction
+    {
+        get => (double)GetValue(NeglectFractionProperty);
+        set => SetValue(NeglectFractionProperty, value);
+    }
+
     /// Seconds since the widget started; the host advances this each frame.
     public double Time { get; set; }
 
@@ -85,6 +98,18 @@ public sealed class ClawdControl : FrameworkElement
 
     private static Brush Freeze(Brush brush)
     {
+        brush.Freeze();
+        return brush;
+    }
+
+    /// Fades the body colour toward black; capped at 85% so there's always
+    /// enough colour left to read as "sitting there", not "gone".
+    private static Brush TannedBrush(double neglect)
+    {
+        var amount = Math.Clamp(neglect, 0, 1) * 0.85;
+        var c = ClawdSprite.BodyColor;
+        byte Darken(byte channel) => (byte)(channel * (1 - amount));
+        var brush = new SolidColorBrush(Color.FromRgb(Darken(c.R), Darken(c.G), Darken(c.B)));
         brush.Freeze();
         return brush;
     }
@@ -137,6 +162,11 @@ public sealed class ClawdControl : FrameworkElement
 
     private void DrawBody(DrawingContext dc)
     {
+        // Left alone under the parasol too long: Clawd tans toward black,
+        // stopping just short of it — a wordless "come touch me" rather than
+        // a full blackout, which would just look broken.
+        var bodyBrush = NeglectFraction > 0.001 ? TannedBrush(NeglectFraction) : BodyBrush;
+
         var grid = ClawdSprite.Grid(CurrentPose(Time));
         for (var row = 0; row < ClawdSprite.GridHeight; row++)
         {
@@ -156,7 +186,7 @@ public sealed class ClawdControl : FrameworkElement
                 var legSwing = kick * (col < ClawdSprite.GridWidth / 2 ? 1 : -1);
                 // The +0.4 overlap hides hairline seams between adjacent pixels.
                 dc.DrawRectangle(
-                    cell == ClawdSprite.Pixel.Body ? BodyBrush : DarkBrush,
+                    cell == ClawdSprite.Pixel.Body ? bodyBrush : DarkBrush,
                     null,
                     new Rect(col * PxW + legSwing, row * PxH, PxW + 0.4, PxH + 0.4));
             }
@@ -208,8 +238,13 @@ public sealed class ClawdControl : FrameworkElement
             return;
         }
         // Sweat and sparkles both belong to the walking states; under the
-        // parasol they'd fight the calm.
-        if (Resting) return;
+        // parasol they'd fight the calm — except once it's tanned nearly
+        // all the way, which is the one thing worth interrupting the calm for.
+        if (Resting)
+        {
+            if (NeglectFraction >= 0.92) DrawPleaseTouch(dc, t, originX, originY);
+            return;
+        }
 
         switch (Mood)
         {
@@ -355,6 +390,20 @@ public sealed class ClawdControl : FrameworkElement
         }
         geometry.Freeze();
         dc.DrawGeometry(brush, null, geometry);
+    }
+
+    /// A slow pulsing heart once Clawd has tanned nearly to the limit — the
+    /// wordless cue that a touch is what resets it, not more waiting.
+    private void DrawPleaseTouch(DrawingContext dc, double t, double originX, double originY)
+    {
+        var pulse = 0.5 + 0.5 * Math.Sin(t * 2.4);
+        var brush = new SolidColorBrush(Color.FromArgb((byte)(150 + 100 * pulse), 255, 138, 158));
+        brush.Freeze();
+        var heart = new FormattedText("♥", CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+            Typeface, (6.0 + pulse * 1.2) * Scale / 3, brush, 1.0);
+        dc.DrawText(heart, new Point(
+            originX + SpriteWidth * 0.5 - heart.Width / 2,
+            originY - 9 * Scale / 3 - pulse * 1.5 * Scale / 3));
     }
 
     // MARK: Motion
