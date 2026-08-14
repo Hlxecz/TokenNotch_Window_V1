@@ -1,0 +1,23 @@
+# Build output
+bin/
+obj/
+.vs/
+*.user
+*.suo
+
+# Anything credential-shaped must never be committed. The app only ever READS
+# the CLIs' own credential files from the user profile; nothing belongs here.
+*.credentials.json
+.credentials.json
+auth.json
+settings.json
+secrets.json
+appsettings.*.json
+*.pem
+*.key
+*.pfx
+*.p12
+*.env
+.env*
+*token*.json
+*credential*
