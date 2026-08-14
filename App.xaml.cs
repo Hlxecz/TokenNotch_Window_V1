@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Windows;
 using System.Windows.Forms;
 using Application = System.Windows.Application;
@@ -13,6 +14,7 @@ public partial class App : Application
     private MainWindow? _window;
     private ToolStripMenuItem? _showItem;
     private ToolStripMenuItem? _lockItem;
+    private Mutex? _singleInstance;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -21,6 +23,20 @@ public partial class App : Application
         if (e.Args.Contains("--gen-icon"))
         {
             IconGen.Run(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Resources"));
+            Shutdown();
+            return;
+        }
+
+        // Double-clicking the exe again should not stack up a second crab.
+        // Held for the process lifetime; the OS releases it if we crash.
+        _singleInstance = new Mutex(true, @"Local\TokenNotchWin.SingleInstance", out var isFirst);
+        if (!isFirst)
+        {
+            _singleInstance.Dispose();
+            _singleInstance = null;
+            // The running copy may have been hidden to the tray — nudge it
+            // back into view so the click still feels like it did something.
+            SignalExistingInstance();
             Shutdown();
             return;
         }
@@ -53,7 +69,40 @@ public partial class App : Application
         // Double-clicking the tray icon is the quickest way to get it back.
         _tray.DoubleClick += (_, _) => _window.SetHidden(false);
 
+        ListenForShowSignal();
         SyncMenu();
+    }
+
+    private const string ShowSignalName = @"Local\TokenNotchWin.Show";
+
+    /// Second launch: poke the already-running copy and let it surface.
+    private static void SignalExistingInstance()
+    {
+        if (EventWaitHandle.TryOpenExisting(ShowSignalName, out var handle))
+        {
+            using (handle) handle.Set();
+        }
+    }
+
+    /// Waits on the signal a second launch raises, then unhides the widget.
+    /// Background thread so it dies with the process; the UI touch hops back
+    /// onto the dispatcher.
+    private void ListenForShowSignal()
+    {
+        var handle = new EventWaitHandle(false, EventResetMode.AutoReset, ShowSignalName);
+        var thread = new Thread(() =>
+        {
+            while (true)
+            {
+                handle.WaitOne();
+                Dispatcher.Invoke(() => _window?.SetHidden(false));
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "TokenNotch show-signal",
+        };
+        thread.Start();
     }
 
     /// Reads app.ico out of the WPF resource stream rather than off disk:
@@ -79,6 +128,11 @@ public partial class App : Application
         {
             _tray.Visible = false;
             _tray.Dispose();
+        }
+        if (_singleInstance is not null)
+        {
+            _singleInstance.ReleaseMutex();
+            _singleInstance.Dispose();
         }
         base.OnExit(e);
     }

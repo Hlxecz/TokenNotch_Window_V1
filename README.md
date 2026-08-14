@@ -34,6 +34,9 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 생성된 `dist/TokenNotchWin.exe` 하나만 있으면 어디서든 더블클릭으로 실행됩니다.
 작업표시줄 버튼 없이 트레이 아이콘만 생깁니다.
 
+이미 실행 중일 때 exe를 다시 눌러도 두 번째 캐릭터가 생기지 않습니다 — 대신 트레이로
+숨겨둔 상태였다면 다시 화면에 나타납니다.
+
 ## 조작
 
 | 동작 | 결과 |
