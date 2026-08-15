@@ -62,6 +62,33 @@ public sealed class UsageViewModel : INotifyPropertyChanged
             _claudeError = null;
             _lastUpdated = DateTime.Now;
         }
+        catch (TokenExpiredException ex)
+        {
+            // The token only lasts ~8 hours, so rather than telling the user to
+            // go open a terminal, have the CLI renew it and try again.
+            _claudeError = ex.Message;
+            RaiseAll();
+
+            if (await CredentialRefresher.TryRenewClaudeAsync())
+            {
+                try
+                {
+                    _claude = await UsageApi.FetchClaudeAsync();
+                    _claudeError = null;
+                    _lastUpdated = DateTime.Now;
+                    return;
+                }
+                catch (Exception retry)
+                {
+                    _claudeError = retry.Message;
+                    return;
+                }
+            }
+
+            _claudeError = CredentialRefresher.InCooldown
+                ? "Claude 토큰이 만료됐어요. `claude`를 한 번 실행해 주세요."
+                : "Claude 자동 갱신에 실패했어요. `claude`를 한 번 실행해 주세요.";
+        }
         catch (UsageException ex) when (ex.Message.Contains("429"))
         {
             _claudeCooldownUntil = DateTime.UtcNow.AddMinutes(15);

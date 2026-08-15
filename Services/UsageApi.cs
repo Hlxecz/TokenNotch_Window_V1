@@ -21,7 +21,10 @@ public sealed record CodexUsage(
     UsageWindow? SevenDay,
     string? PlanType);
 
-public sealed class UsageException(string message) : Exception(message);
+public class UsageException(string message) : Exception(message);
+
+/// Distinct so a refresh attempt can be triggered without matching on text.
+public sealed class TokenExpiredException(string message) : UsageException(message);
 
 /// <summary>
 /// Windows has no login keychain equivalent, so Claude Code stores its OAuth
@@ -53,7 +56,7 @@ public static class Credentials
         if (oauth.TryGetProperty("expiresAt", out var expiresNode)
             && expiresNode.TryGetDouble(out var expiresMs)
             && DateTimeOffset.FromUnixTimeMilliseconds((long)expiresMs) < DateTimeOffset.UtcNow)
-            throw new UsageException("Claude 토큰이 만료됐어요. `claude`를 한 번 실행하면 갱신됩니다.");
+            throw new TokenExpiredException("Claude 토큰이 만료됐어요. 자동 갱신을 시도하는 중…");
 
         return token;
     }
