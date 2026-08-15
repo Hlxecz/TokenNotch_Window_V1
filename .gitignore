@@ -6,8 +6,10 @@ dist/
 *.user
 *.suo
 
-# Anything credential-shaped must never be committed. The app only ever READS
-# the CLIs' own credential files from the user profile; nothing belongs here.
+# Credential-shaped data must never be committed. The app only ever READS the
+# CLIs' own files from the user profile; nothing of the sort belongs in here.
+# Scoped to data files on purpose — a bare *credential* glob also swallows
+# source like Services/CredentialRefresher.cs.
 *.credentials.json
 .credentials.json
 auth.json
@@ -21,4 +23,5 @@ appsettings.*.json
 *.env
 .env*
 *token*.json
-*credential*
+*credential*.json
+*credentials*.txt
