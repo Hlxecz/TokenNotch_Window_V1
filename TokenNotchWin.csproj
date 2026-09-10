@@ -10,10 +10,18 @@
     <AssemblyName>TokenNotchWin</AssemblyName>
     <RootNamespace>TokenNotchWin</RootNamespace>
     <ApplicationIcon>Resources\app.ico</ApplicationIcon>
+    <IncludeLocalPetAssets Condition="'$(IncludeLocalPetAssets)' == ''">true</IncludeLocalPetAssets>
   </PropertyGroup>
 
   <ItemGroup>
     <Resource Include="Resources\app.ico" />
+  </ItemGroup>
+
+  <!-- These ignored, local-only packs are embedded when present. Public clones
+       build normally with no match and fall back to the bundled Clawd pet. -->
+  <ItemGroup Condition="'$(IncludeLocalPetAssets)' == 'true'">
+    <Resource Include="Resources\pixel-*-actions\*\atlas.png" />
+    <Resource Include="Resources\pixel-*-actions\*\manifest.json" />
   </ItemGroup>
 
   <!-- WinForms is referenced only for the tray icon; its implicit global usings

@@ -1,10 +1,15 @@
 # Build output
 bin/
 obj/
-dist/
+dist*/
 .vs/
 *.user
 *.suo
+
+# Optional character artwork is local-only. app.ico is the only distributable
+# file in Resources; this also keeps generated sheets and archives out of Git.
+/Resources/*
+!/Resources/app.ico
 
 # Credential-shaped data must never be committed. The app only ever READS the
 # CLIs' own files from the user profile; nothing of the sort belongs in here.

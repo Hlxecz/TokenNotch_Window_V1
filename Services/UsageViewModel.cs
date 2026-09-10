@@ -16,6 +16,47 @@ public sealed class UsageViewModel : INotifyPropertyChanged
     /// so retrying on the normal cadence just re-arms the penalty.
     private DateTime? _claudeCooldownUntil;
 
+    /// Last utilization we saw for each service's primary window, used to turn
+    /// the endpoint's absolute reading into an increment. Tracked separately
+    /// so Claude and Codex windows can reset independently without one's
+    /// rollover being mistaken for the other's.
+    private double? _lastClaudeUtilization;
+    private double? _lastCodexUtilization;
+
+    /// Lifetime total of those increments — the pet's experience bar. Seeded
+    /// from settings on construction and reported through UsagePointsChanged
+    /// so the host can persist it.
+    public double CumulativeUsagePoints { get; private set; }
+
+    /// Raised when the total moves, so the host can save without polling.
+    public event Action<double>? UsagePointsChanged;
+
+    public UsageViewModel(double startingPoints = 0) => CumulativeUsagePoints = startingPoints;
+
+    public Stage Stage => PixelEvolution.StageFor(CumulativeUsagePoints);
+
+    /// Folds a fresh utilization reading into the lifetime total. Only rises
+    /// count: when a window resets, utilization drops back toward zero, and
+    /// treating that as negative progress would un-evolve the pet. Shared by
+    /// both services — Claude and Codex usage both feed the same pet.
+    private void AccumulateUsage(double? utilization, ref double? lastUtilization)
+    {
+        if (utilization is not { } now) return;
+
+        if (lastUtilization is { } previous)
+        {
+            // A drop means the window rolled over; the usage since that reset
+            // is whatever the new reading already shows.
+            var gained = now >= previous ? now - previous : now;
+            if (gained > 0)
+            {
+                CumulativeUsagePoints += gained;
+                UsagePointsChanged?.Invoke(CumulativeUsagePoints);
+            }
+        }
+        lastUtilization = now;
+    }
+
     public UsageWindow? FiveHour => _claude?.FiveHour;
     public UsageWindow? SevenDay => _claude?.SevenDay;
     public UsageWindow? SevenDayOpus => _claude?.SevenDayOpus;
@@ -40,6 +81,24 @@ public sealed class UsageViewModel : INotifyPropertyChanged
     public string ClaudePhrase => Format.Phrase(ClaudeMood);
     public string CodexPhrase => Format.Phrase(CodexMood);
 
+    public Mood MoodFor(AiProvider provider) => provider switch
+    {
+        AiProvider.Codex => CodexMood,
+        _ => ClaudeMood,
+    };
+
+    public string PercentTextFor(AiProvider provider) => provider switch
+    {
+        AiProvider.Codex => CodexPercentText,
+        _ => ClaudePercentText,
+    };
+
+    public Brush PercentBrushFor(AiProvider provider) => provider switch
+    {
+        AiProvider.Codex => CodexPercentBrush,
+        _ => ClaudePercentBrush,
+    };
+
     public string CodexTitle => _codex?.PlanType is { Length: > 0 } plan
         ? $"Codex ({char.ToUpper(plan[0])}{plan[1..]})"
         : "Codex";
@@ -59,6 +118,7 @@ public sealed class UsageViewModel : INotifyPropertyChanged
         try
         {
             _claude = await UsageApi.FetchClaudeAsync();
+            AccumulateUsage(_claude.FiveHour?.Utilization, ref _lastClaudeUtilization);
             _claudeError = null;
             _lastUpdated = DateTime.Now;
         }
@@ -74,6 +134,7 @@ public sealed class UsageViewModel : INotifyPropertyChanged
                 try
                 {
                     _claude = await UsageApi.FetchClaudeAsync();
+                    AccumulateUsage(_claude.FiveHour?.Utilization, ref _lastClaudeUtilization);
                     _claudeError = null;
                     _lastUpdated = DateTime.Now;
                     return;
@@ -106,6 +167,10 @@ public sealed class UsageViewModel : INotifyPropertyChanged
         try
         {
             _codex = await UsageApi.FetchCodexAsync();
+            // A Plus plan may only ever report the weekly window, so fall back
+            // the same way CodexWindow does — otherwise those accounts would
+            // never accumulate anything.
+            AccumulateUsage(_codex.FiveHour?.Utilization ?? _codex.SevenDay?.Utilization, ref _lastCodexUtilization);
             _codexError = null;
             _lastUpdated = DateTime.Now;
         }

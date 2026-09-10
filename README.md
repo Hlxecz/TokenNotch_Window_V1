@@ -3,10 +3,25 @@
 작업표시줄 위를 돌아다니는 **Clawd(Claude Code 공식 픽셀 게)** 가 Claude Code와 Codex CLI의
 남은 사용량과 리셋 시간을 알려주는 데스크톱 위젯입니다.
 
+기본 배포에는 Clawd만 포함됩니다. 개인적으로 보유한 픽셀 애니메이션 팩이 로컬에 있으면
+캐릭터 선택과 사용량 기반 진화 기능이 추가로 활성화되지만, 해당 그림 파일은 이 저장소에서
+실행 가능한 원본 자산으로 배포하지 않습니다.
+
 > macOS용 [TokenNotch](https://github.com/Borelchu/TokenNotch) (© Borel, MIT)를 Windows로 옮긴 포트입니다.
 > 원본은 맥북 노치 양옆에 캐릭터를 붙이지만, Windows에는 노치가 없으므로 작업표시줄 위를 순찰하는 방식으로 바꿨습니다.
 
 ---
+
+## 화면 미리보기
+
+<p align="center">
+  <img src="docs/screenshots/pikachu.png" alt="피카츄 캐릭터와 TokenNotch 사용량 패널" width="31%">
+  <img src="docs/screenshots/squirtle.png" alt="꼬부기 캐릭터와 진화 진행도" width="31%">
+  <img src="docs/screenshots/snorlax.png" alt="잠만보 캐릭터와 TokenNotch 사용량 패널" width="31%">
+</p>
+
+화면 예시는 로컬 픽셀 팩을 적용한 모습입니다. 실행에 필요한 원본 스프라이트와 애니메이션
+팩은 저장소에 포함되지 않습니다.
 
 ## 요구 사항
 
@@ -16,6 +31,7 @@
 | 런타임 | .NET 9 SDK 또는 .NET 9 Desktop Runtime |
 | Claude 데이터 | Claude Code CLI 로그인 상태 |
 | Codex 데이터 (선택) | Codex CLI 로그인 상태 |
+| 로컬 캐릭터 (선택) | 직접 사용할 권리가 있는 로컬 픽셀 팩 |
 
 ## 빌드 & 실행
 
@@ -34,6 +50,12 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 생성된 `dist/TokenNotchWin.exe` 하나만 있으면 어디서든 더블클릭으로 실행됩니다.
 작업표시줄 버튼 없이 트레이 아이콘만 생깁니다.
 
+그림이 없는 공개 저장소 상태를 검증할 때는 다음처럼 로컬 픽셀 포함을 명시적으로 끌 수 있습니다.
+
+```bash
+dotnet build -c Release -p:IncludeLocalPetAssets=false
+```
+
 이미 실행 중일 때 exe를 다시 눌러도 두 번째 캐릭터가 생기지 않습니다 — 대신 트레이로
 숨겨둔 상태였다면 다시 화면에 나타납니다.
 
@@ -44,7 +66,8 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 | 마우스 올리기 | 확장 패널 (서비스별 HP바, 리셋 카운트다운) |
 | 왼쪽 드래그 | 캐릭터를 집어 옮김 — 잡히면 팔다리를 휘적거림 |
 | 놓기 | 작업표시줄로 낙하 + 착지 시 살짝 튕김 |
-| 오른쪽 클릭 | 위치 고정 / 숨기기 / 종료 |
+| 오른쪽 클릭 | 캐릭터·메인 AI 선택 / 위치 고정 / 숨기기 / 종료 |
+| 확장 패널 카드 드래그 | Claude와 Codex 카드 순서 변경 |
 | 트레이 아이콘 | 보이기·숨기기, 위치 고정, 종료 (더블클릭 = 다시 보이기) |
 
 **위치 고정**을 켜면 순찰과 낙하를 멈추고 놓은 자리에 그대로 머뭅니다. 다중 모니터에서
@@ -78,6 +101,28 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 ```bash
 TOKENNOTCH_MOOD=happy ./bin/Release/net9.0-windows/TokenNotchWin.exe
 ```
+
+## 로컬 전용 픽셀 자산
+
+`Resources/app.ico`를 제외한 `Resources` 파일은 `.gitignore`로 차단되어 GitHub에 올라가지
+않습니다. 로컬 팩이 없거나 완전하지 않으면 해당 캐릭터 선택지는 자동으로 숨겨지고 Clawd로
+안전하게 시작합니다.
+
+앱에서 사용하는 팩은 다음 구조이며, 각 캐릭터 폴더에는 `atlas.png`와 `manifest.json`이
+필요합니다.
+
+```text
+Resources/
+  pixel-*-actions/
+    <character>/
+      atlas.png
+      manifest.json
+```
+
+로컬 팩이 있는 상태에서 일반 빌드나 배포를 하면 그림이 결과 실행 파일에 포함됩니다. 코드만
+공개하려면 저장소 소스만 올리고, 실행 파일을 배포할 때는 반드시
+`-p:IncludeLocalPetAssets=false`로 빌드해야 합니다. 로컬 픽셀 자산과 그 라이선스는 이
+프로젝트의 MIT 라이선스 적용 대상이 아닙니다.
 
 ## 사용량 데이터를 어디서 가져오나
 
@@ -113,7 +158,7 @@ TOKENNOTCH_MOOD=happy ./bin/Release/net9.0-windows/TokenNotchWin.exe
 |---|---|---|
 | 자격 증명 | 로그인 키체인 | 사용자 폴더의 평문 JSON |
 | 배치 | 노치 양옆 고정 | 작업표시줄 순찰 + 드래그 이동 + 위치 고정 |
-| Codex 캐릭터 | OpenAI CDN 공식 스프라이트시트 | 직접 그린 로봇 (WPF가 WebP를 디코딩하지 못함) |
+| 표시 기준 | Claude 사용량 중심 | Claude 또는 Codex를 메인 AI로 선택 |
 | 휴식 | 없음 | 유휴 시 파라솔 펴고 앉아서 휴식 |
 
 Clawd 스프라이트는 원본과 동일하게 Claude Code CLI에 내장된 쿼드런트 블록 아트
@@ -124,12 +169,14 @@ Clawd 스프라이트는 원본과 동일하게 Claude Code CLI에 내장된 쿼
 ```
 App.xaml(.cs)          앱 진입점, 트레이 아이콘
 MainWindow.xaml(.cs)   창 배치, 드래그/순찰/휴식 상태 머신, 확장 패널
-Controls/              캐릭터 렌더링 (Clawd, Codex 봇, 스프라이트 데이터)
+Controls/              Clawd 및 선택적 로컬 픽셀 캐릭터 렌더링
 Services/              사용량 API 호출, 설정 저장, 무드/뷰모델
-Tools/                 IconGen — 트레이 아이콘(.ico) 굽는 1회성 도구
-Resources/             app.ico
+Tools/                 아이콘 및 로컬 픽셀 팩 생성 도구
+Resources/             공개 저장소에는 app.ico만 포함
 ```
 
 ## 라이선스
 
-MIT — 원본 TokenNotch(© Borel)의 저작권 표시를 유지합니다. [LICENSE](LICENSE) 참고.
+소스 코드는 MIT이며 원본 TokenNotch(© Borel)의 저작권 표시를 유지합니다. [LICENSE](LICENSE)
+참고. 로컬 캐릭터 자산과 화면 예시에 나타나는 캐릭터 그림은 MIT 적용 대상이 아니며, 각
+권리자와 제공처의 조건을 별도로 따릅니다.

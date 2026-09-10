@@ -11,7 +11,7 @@
         ShowInTaskbar="False"
         ResizeMode="NoResize"
         SizeToContent="Manual"
-        Width="300" Height="72">
+        Width="340" Height="190">
 
     <Window.Resources>
         <Style x:Key="RowLabel" TargetType="TextBlock">
@@ -24,6 +24,33 @@
             <Setter Property="FontFamily" Value="Segoe UI"/>
             <Setter Property="FontSize" Value="9.5"/>
             <Setter Property="Foreground" Value="#88FFFFFF"/>
+        </Style>
+        <Style x:Key="ProviderOption" TargetType="RadioButton">
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="9.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#99FFFFFF"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Shell" CornerRadius="5" Padding="8,4"
+                                Background="Transparent">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Shell" Property="Background" Value="#35FFFFFF"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Shell" Property="Background" Value="#24FFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
 
@@ -48,7 +75,7 @@
                 <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.55" Color="Black"/>
             </Border.Effect>
 
-            <StackPanel Width="272">
+            <StackPanel Width="286">
                 <!-- Header -->
                 <Grid Margin="0,0,0,8">
                     <StackPanel Orientation="Horizontal">
@@ -77,53 +104,143 @@
                     </StackPanel>
                 </Grid>
 
-                <!-- Claude card -->
-                <Border CornerRadius="12" Background="#22D77757" Padding="9" Margin="0,0,0,7">
-                    <StackPanel>
-                        <Grid Margin="0,0,0,7">
-                            <StackPanel Orientation="Horizontal">
-                                <local:ClawdControl x:Name="PanelClawd" Scale="1.6"
-                                                    VerticalAlignment="Center"/>
-                                <TextBlock Text="Claude Code" Margin="7,0,0,0"
-                                           FontFamily="Segoe UI" FontSize="11" FontWeight="Bold"
-                                           Foreground="White" VerticalAlignment="Center"/>
-                            </StackPanel>
-                            <Border HorizontalAlignment="Right" VerticalAlignment="Center"
-                                    CornerRadius="8" Background="#1FFFFFFF" Padding="7,3">
-                                <TextBlock x:Name="ClaudePhrase" Style="{StaticResource RowMeta}"
-                                           Foreground="#D8FFFFFF"/>
-                            </Border>
+                <!-- The selected provider drives the floating pet and compact badge. -->
+                <Grid Margin="0,0,0,8">
+                    <TextBlock Text="메인 AI" Style="{StaticResource RowLabel}"
+                               VerticalAlignment="Center"/>
+                    <Border HorizontalAlignment="Right" CornerRadius="6"
+                            Background="#18FFFFFF" Padding="2">
+                        <StackPanel Orientation="Horizontal">
+                            <RadioButton x:Name="ClaudeMainOption" Content="Claude"
+                                         GroupName="MainProvider" Tag="Claude"
+                                         Style="{StaticResource ProviderOption}"
+                                         Click="MainProvider_Click"/>
+                            <RadioButton x:Name="CodexMainOption" Content="GPT / Codex"
+                                         GroupName="MainProvider" Tag="Codex"
+                                         Style="{StaticResource ProviderOption}"
+                                         Click="MainProvider_Click"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- The selected pet appears once, above both provider cards. -->
+                <Border CornerRadius="7" Background="#14FFFFFF"
+                        Padding="8,7" Margin="0,0,0,8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="76"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid Width="76" Height="80" VerticalAlignment="Center">
+                            <local:PokemonPetControl x:Name="PanelPokemon" Scale="0.66"
+                                                     HorizontalAlignment="Center"
+                                                     VerticalAlignment="Center"
+                                                     Visibility="Collapsed"/>
+                            <local:ClawdControl x:Name="PanelClawdCrab" Scale="1.7"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Visibility="Collapsed"/>
                         </Grid>
-                        <TextBlock x:Name="ClaudeErrorText" Style="{StaticResource RowMeta}"
-                                   Foreground="#FFB067" TextWrapping="Wrap"
-                                   Visibility="Collapsed" Margin="0,0,0,5"/>
-                        <StackPanel x:Name="ClaudeRows"/>
-                    </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="현재 캐릭터" Style="{StaticResource RowMeta}"/>
+                            <TextBlock x:Name="CharacterNameText" Style="{StaticResource RowLabel}"
+                                       Margin="0,1,0,0"/>
+                            <StackPanel x:Name="GrowthPanel" Margin="0,4,0,0">
+                                <Grid Margin="0,0,0,3">
+                                    <TextBlock x:Name="StageText" Style="{StaticResource RowMeta}"/>
+                                    <TextBlock x:Name="StageProgressText" Style="{StaticResource RowMeta}"
+                                               HorizontalAlignment="Right"/>
+                                </Grid>
+                                <Border Height="6" CornerRadius="3" Background="#1FFFFFFF">
+                                    <Border x:Name="StageBar" HorizontalAlignment="Left"
+                                            CornerRadius="3" Background="#FFB55A" Width="0"/>
+                                </Border>
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
                 </Border>
 
-                <!-- Codex card -->
-                <Border CornerRadius="12" Background="#22789EFA" Padding="9">
-                    <StackPanel>
-                        <Grid Margin="0,0,0,7">
-                            <StackPanel Orientation="Horizontal">
-                                <local:CodexBotControl x:Name="PanelCodex" Scale="1.1"
-                                                       VerticalAlignment="Center"/>
-                                <TextBlock x:Name="CodexTitleText" Text="Codex" Margin="7,0,0,0"
-                                           FontFamily="Segoe UI" FontSize="11" FontWeight="Bold"
-                                           Foreground="White" VerticalAlignment="Center"/>
-                            </StackPanel>
-                            <Border HorizontalAlignment="Right" VerticalAlignment="Center"
-                                    CornerRadius="8" Background="#1FFFFFFF" Padding="7,3">
-                                <TextBlock x:Name="CodexPhrase" Style="{StaticResource RowMeta}"
-                                           Foreground="#D8FFFFFF"/>
-                            </Border>
-                        </Grid>
-                        <TextBlock x:Name="CodexErrorText" Style="{StaticResource RowMeta}"
-                                   Foreground="#FFB067" TextWrapping="Wrap"
-                                   Visibility="Collapsed" Margin="0,0,0,5"/>
-                        <StackPanel x:Name="CodexRows"/>
-                    </StackPanel>
-                </Border>
+                <StackPanel x:Name="CardHost" AllowDrop="True"
+                            DragOver="CardHost_DragOver" Drop="CardHost_Drop">
+                    <!-- Claude card -->
+                    <Border x:Name="ClaudeCard" Tag="Claude" CornerRadius="8"
+                            Background="#22D77757" BorderBrush="Transparent" BorderThickness="1"
+                            Padding="9" Margin="0,0,0,7" AllowDrop="True"
+                            DragEnter="ProviderCard_DragEnter" DragLeave="ProviderCard_DragLeave"
+                            DragOver="ProviderCard_DragOver" Drop="ProviderCard_Drop">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,7">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="⠿" Tag="Claude" Cursor="SizeAll"
+                                               FontSize="14" Foreground="#66FFFFFF"
+                                               VerticalAlignment="Center" Margin="0,0,5,0"
+                                               ToolTip="드래그하여 순서 변경"
+                                               PreviewMouseLeftButtonDown="CardHandle_PreviewMouseLeftButtonDown"
+                                               PreviewMouseLeftButtonUp="CardHandle_PreviewMouseLeftButtonUp"
+                                               PreviewMouseMove="CardHandle_PreviewMouseMove"/>
+                                    <TextBlock Text="Claude Code"
+                                               FontFamily="Segoe UI" FontSize="11" FontWeight="Bold"
+                                               Foreground="White" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <Border x:Name="ClaudeMainBadge" CornerRadius="6"
+                                            Background="#FFD966" Padding="5,2" Margin="0,0,4,0">
+                                        <TextBlock Text="메인" FontFamily="Segoe UI" FontSize="8"
+                                                   FontWeight="Bold" Foreground="#CC000000"/>
+                                    </Border>
+                                    <Border CornerRadius="6" Background="#1FFFFFFF" Padding="7,3">
+                                        <TextBlock x:Name="ClaudePhrase" Style="{StaticResource RowMeta}"
+                                                   Foreground="#D8FFFFFF"/>
+                                    </Border>
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock x:Name="ClaudeErrorText" Style="{StaticResource RowMeta}"
+                                       Foreground="#FFB067" TextWrapping="Wrap"
+                                       Visibility="Collapsed" Margin="0,0,0,5"/>
+                            <StackPanel x:Name="ClaudeRows"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Codex card -->
+                    <Border x:Name="CodexCard" Tag="Codex" CornerRadius="8"
+                            Background="#22789EFA" BorderBrush="Transparent" BorderThickness="1"
+                            Padding="9" AllowDrop="True"
+                            DragEnter="ProviderCard_DragEnter" DragLeave="ProviderCard_DragLeave"
+                            DragOver="ProviderCard_DragOver" Drop="ProviderCard_Drop">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,7">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="⠿" Tag="Codex" Cursor="SizeAll"
+                                               FontSize="14" Foreground="#66FFFFFF"
+                                               VerticalAlignment="Center" Margin="0,0,5,0"
+                                               ToolTip="드래그하여 순서 변경"
+                                               PreviewMouseLeftButtonDown="CardHandle_PreviewMouseLeftButtonDown"
+                                               PreviewMouseLeftButtonUp="CardHandle_PreviewMouseLeftButtonUp"
+                                               PreviewMouseMove="CardHandle_PreviewMouseMove"/>
+                                    <TextBlock x:Name="CodexTitleText" Text="Codex"
+                                               FontFamily="Segoe UI" FontSize="11" FontWeight="Bold"
+                                               Foreground="White" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <Border x:Name="CodexMainBadge" CornerRadius="6"
+                                            Background="#FFD966" Padding="5,2" Margin="0,0,4,0"
+                                            Visibility="Collapsed">
+                                        <TextBlock Text="메인" FontFamily="Segoe UI" FontSize="8"
+                                                   FontWeight="Bold" Foreground="#CC000000"/>
+                                    </Border>
+                                    <Border CornerRadius="6" Background="#1FFFFFFF" Padding="7,3">
+                                        <TextBlock x:Name="CodexPhrase" Style="{StaticResource RowMeta}"
+                                                   Foreground="#D8FFFFFF"/>
+                                    </Border>
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock x:Name="CodexErrorText" Style="{StaticResource RowMeta}"
+                                       Foreground="#FFB067" TextWrapping="Wrap"
+                                       Visibility="Collapsed" Margin="0,0,0,5"/>
+                            <StackPanel x:Name="CodexRows"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
             </StackPanel>
         </Border>
 
@@ -133,12 +250,23 @@
         <StackPanel x:Name="CharacterStrip" Grid.Row="1" Orientation="Horizontal"
                     Background="Transparent" Cursor="Hand"
                     HorizontalAlignment="Center" VerticalAlignment="Bottom">
-            <local:ClawdControl x:Name="Clawd" Scale="3.2" VerticalAlignment="Bottom"/>
+            <!-- Only one is ever visible; the character setting picks which. -->
+            <local:ClawdControl x:Name="ClawdPet" Scale="3.2" VerticalAlignment="Bottom"
+                                Visibility="Collapsed"/>
+            <local:PokemonPetControl x:Name="PokemonPet" Scale="1.0"
+                                     VerticalAlignment="Bottom" Visibility="Collapsed"/>
             <Border VerticalAlignment="Center" Margin="1,0,0,6"
-                    CornerRadius="7" Background="#CC1C1A19" Padding="6,2">
-                <TextBlock x:Name="PercentText" Text="—"
-                           FontFamily="Segoe UI" FontSize="11" FontWeight="Bold"
-                           Foreground="#8CD973"/>
+                     CornerRadius="7" Background="#CC1C1A19" Padding="6,2">
+                <StackPanel>
+                    <TextBlock x:Name="MainProviderText" Text="CLAUDE"
+                               HorizontalAlignment="Center"
+                               FontFamily="Segoe UI" FontSize="7" FontWeight="Bold"
+                               Foreground="#88FFFFFF"/>
+                    <TextBlock x:Name="PercentText" Text="—"
+                               HorizontalAlignment="Center"
+                               FontFamily="Segoe UI" FontSize="11" FontWeight="Bold"
+                               Foreground="#8CD973"/>
+                </StackPanel>
             </Border>
         </StackPanel>
     </Grid>

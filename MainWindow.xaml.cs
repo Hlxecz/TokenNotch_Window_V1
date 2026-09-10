@@ -10,16 +10,18 @@ namespace TokenNotchWin;
 
 public partial class MainWindow : Window
 {
-    private const double CollapsedHeight = 72;
-    private const double GrabbedHeight = 120; // headroom so the swing doesn't clip
-    private const double RestingHeight = 155; // headroom for the parasol
+    private const double CollapsedHeight = 190; // tall enough for the sprite plus its bob
+    private const double GrabbedHeight = 200;   // headroom so the swing doesn't clip
+    private const double RestingHeight = 240;   // headroom for Clawd's parasol
     private const double Gravity = 2600;
     private const double IdleRestSeconds = 18; // no interaction for this long -> sits down
     private const double NeglectGraceSeconds = 60; // sitting calmly this long before it starts to "tan"
     private const double NeglectSpanSeconds = 20 * 60; // roughly four 5-min poll cycles to reach "please touch me"
 
-    private readonly UsageViewModel _model = new();
+    private const double EvolveFlashSeconds = 2.2;
+
     private readonly Settings _settings = Settings.Load();
+    private readonly UsageViewModel _model;
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly DispatcherTimer _pollTimer = new() { Interval = TimeSpan.FromMinutes(5) };
     private readonly DispatcherTimer _collapseTimer = new() { Interval = TimeSpan.FromMilliseconds(220) };
@@ -31,7 +33,7 @@ public partial class MainWindow : Window
     private double _pauseUntil;
     private double _lastFrameTime;
 
-    private const double StandUpSeconds = 0.55; // parasol furls / Clawd gets up
+    private const double StandUpSeconds = 0.55; // Clawd's parasol furls
 
     private bool _expanded;
     private bool _grabbed;
@@ -41,10 +43,43 @@ public partial class MainWindow : Window
     private double _fallVelocity;
     private double _grabDx, _grabDy;
     private double _lastInteraction;
+    private double _restStartedAt;
+
+    private Stage _stage;
+    private double _evolveUntil; // clock time the evolution flash ends
+    private bool _previewStage; // True when TOKENNOTCH_STAGE forces a preview.
+    private PetCharacter _activePet = PetCharacter.Clawd;
+
+    private bool UsesPokemonRest => PixelEvolution.IsPokemon(_activePet);
+
+    private readonly Dictionary<PetCharacter, MenuItem> _characterItems = new();
+    private readonly Dictionary<AiProvider, MenuItem> _mainProviderItems = new();
+
+    private const string ProviderDragFormat = "TokenNotchWin.AiProvider";
+    private Point _cardDragStart;
+    private AiProvider? _draggedProvider;
+    private UIElement? _cardDragHandle;
+    private Border? _cardDragTarget;
 
     public MainWindow()
     {
         InitializeComponent();
+
+        _activePet = PokemonSpriteAtlas.IsAvailable(_settings.Pet)
+            ? _settings.Pet
+            : PetCharacter.Clawd;
+
+        _model = new UsageViewModel(_settings.CumulativeUsagePoints);
+        _stage = _model.Stage;
+        // Preview a stage without accumulating usage. Preview mode also keeps
+        // the pet awake so the idle tint does not obscure the selected stage.
+        if (Environment.GetEnvironmentVariable("TOKENNOTCH_STAGE") is { } s
+            && Enum.TryParse<Stage>(s, true, out var forced))
+        {
+            _stage = forced;
+            _previewStage = true;
+        }
+        _model.UsagePointsChanged += OnUsagePointsChanged;
 
         var work = SystemParameters.WorkArea;
         _x = _settings.X ?? work.Left + work.Width / 2;
@@ -55,12 +90,30 @@ public partial class MainWindow : Window
         CharacterStrip.MouseLeftButtonDown += OnGrab;
         CharacterStrip.MouseLeftButtonUp += OnRelease;
         CharacterStrip.ContextMenu = BuildContextMenu();
+        ApplyCharacter();
+        ApplyProviderPreferences();
+        ApplyCardOrder();
 
         _collapseTimer.Tick += (_, _) =>
         {
             _collapseTimer.Stop();
-            if (!IsMouseOver) SetExpanded(false);
+            if (_draggedProvider is null && !IsMouseOver) SetExpanded(false);
         };
+    }
+
+    /// Persist every gain — the pet's progress should survive a crash, not just
+    /// a clean exit — and fire the evolution beat when a threshold is crossed.
+    private void OnUsagePointsChanged(double points)
+    {
+        _settings.CumulativeUsagePoints = points;
+        _settings.Save();
+
+        var stage = _model.Stage;
+        if (stage != _stage)
+        {
+            _stage = stage;
+            _evolveUntil = _clock.Elapsed.TotalSeconds + EvolveFlashSeconds;
+        }
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -160,29 +213,52 @@ public partial class MainWindow : Window
         // Keeps sitting there long enough and it starts to tan toward black.
         // Grabbing or hovering resets _lastInteraction and starts the furl,
         // either of which snaps the colour back on the very next frame.
-        var neglect = _resting && _closing <= 0
+        var neglect = _resting && _closing <= 0 && !_previewStage
             ? Math.Clamp((idle - IdleRestSeconds - NeglectGraceSeconds) / NeglectSpanSeconds, 0, 1)
             : 0;
 
-        Clawd.Time = t;
-        Clawd.Mood = _model.ClaudeMood;
-        Clawd.FacingRight = _direction > 0;
-        Clawd.Grabbed = _grabbed;
-        Clawd.Resting = _resting;
-        Clawd.ClosingProgress = _closing;
-        Clawd.NeglectFraction = neglect;
-        Clawd.InvalidateVisual();
+        // Fades out over the flash window rather than cutting off, so the
+        // white wash and the burst retreat together.
+        var evolve = _evolveUntil > t ? (_evolveUntil - t) / EvolveFlashSeconds : 0;
+
+        var primaryMood = _model.MoodFor(_settings.PrimaryProvider);
+        var pokemonMoving = !_settings.Locked && !_resting && !_expanded
+                            && primaryMood != Mood.Sleeping && t >= _pauseUntil
+                            && !_grabbed && !_falling;
+
+        if (ClawdPet.Visibility == Visibility.Visible)
+        {
+            ClawdPet.Time = t;
+            ClawdPet.Mood = primaryMood;
+            ClawdPet.FacingRight = _direction > 0;
+            ClawdPet.Grabbed = _grabbed;
+            ClawdPet.Resting = _resting;
+            ClawdPet.ClosingProgress = _closing;
+            ClawdPet.NeglectFraction = neglect;
+            ClawdPet.InvalidateVisual();
+        }
+
+        if (PokemonPet.Visibility == Visibility.Visible)
+        {
+            PokemonPet.Time = t;
+            PokemonPet.RestElapsed = Math.Max(0, t - _restStartedAt);
+            PokemonPet.Mood = primaryMood;
+            PokemonPet.Character = _activePet;
+            PokemonPet.Stage = _stage;
+            PokemonPet.FacingRight = _direction > 0;
+            PokemonPet.Moving = pokemonMoving;
+            PokemonPet.Grabbed = _grabbed;
+            PokemonPet.Resting = _resting;
+            PokemonPet.NeglectFraction = neglect;
+            PokemonPet.EvolveFlash = evolve;
+            PokemonPet.InvalidateVisual();
+        }
 
         AdvanceClosing(dt);
 
         if (_expanded)
         {
-            PanelClawd.Time = t;
-            PanelClawd.Mood = _model.ClaudeMood;
-            PanelClawd.InvalidateVisual();
-            PanelCodex.Time = t;
-            PanelCodex.Mood = _model.CodexMood;
-            PanelCodex.InvalidateVisual();
+            UpdateCharacterPanel(t, primaryMood);
         }
 
         UpdateHover();
@@ -192,18 +268,44 @@ public partial class MainWindow : Window
         else Walk(t, dt);
     }
 
-    /// The parasol needs vertical room the walking states don't, so settling
-    /// down and getting back up both have to resize the window.
-    ///
-    /// Standing up isn't instant: Resting stays true while _closing sweeps to
-    /// 1 so the furl has something to animate against, and only then does the
-    /// state actually flip. Sitting down is immediate.
+    private void UpdateCharacterPanel(double t, Mood mood)
+    {
+        if (PanelPokemon.Visibility == Visibility.Visible)
+        {
+            PanelPokemon.Time = t;
+            PanelPokemon.Mood = mood;
+            PanelPokemon.Character = _activePet;
+            PanelPokemon.Stage = _stage;
+            PanelPokemon.Moving = false;
+            PanelPokemon.Resting = false;
+            PanelPokemon.InvalidateVisual();
+        }
+        else if (PanelClawdCrab.Visibility == Visibility.Visible)
+        {
+            PanelClawdCrab.Time = t;
+            PanelClawdCrab.Mood = mood;
+            PanelClawdCrab.InvalidateVisual();
+        }
+    }
+
+    /// Pokemon settle through their own animation. Only Clawd keeps the slower
+    /// stand-up transition used by its separate parasol drawing.
     private void SetResting(bool resting)
     {
         if (resting)
         {
             if (_resting) return;
             _resting = true;
+            _closing = 0;
+            _restStartedAt = _clock.Elapsed.TotalSeconds;
+            ApplyWindowHeight();
+            return;
+        }
+
+        if (UsesPokemonRest)
+        {
+            if (!_resting) return;
+            _resting = false;
             _closing = 0;
             ApplyWindowHeight();
             return;
@@ -235,6 +337,15 @@ public partial class MainWindow : Window
     private void UpdateHover()
     {
         if (_grabbed) return;
+
+        // WPF reports IsMouseOver=false while DoDragDrop owns the pointer.
+        // Treat an active card reorder as interaction so the panel does not
+        // collapse before the pointer reaches the other card.
+        if (_draggedProvider is not null)
+        {
+            _collapseTimer.Stop();
+            return;
+        }
 
         if (IsMouseOver)
         {
@@ -290,11 +401,12 @@ public partial class MainWindow : Window
     /// under the pointer.
     private void Walk(double t, double dt)
     {
-        // _resting covers the stand-up too, so no walking until the parasol
-        // is fully furled.
-        if (_settings.Locked || _resting || _expanded || _model.ClaudeMood == Mood.Sleeping || t < _pauseUntil) return;
+        // For Clawd, _resting also covers the stand-up transition until its
+        // parasol is fully furled.
+        var primaryMood = _model.MoodFor(_settings.PrimaryProvider);
+        if (_settings.Locked || _resting || _expanded || primaryMood == Mood.Sleeping || t < _pauseUntil) return;
 
-        var speed = _model.ClaudeMood switch
+        var speed = primaryMood switch
         {
             Mood.Happy => 26.0,
             Mood.Worried => 44.0,
@@ -397,7 +509,7 @@ public partial class MainWindow : Window
     {
         if (_expanded) FitToPanel();
         else if (_grabbed) Height = GrabbedHeight;
-        else if (_resting) Height = RestingHeight;
+        else if (_resting && !UsesPokemonRest) Height = RestingHeight;
         else Height = CollapsedHeight;
         ApplyPlacement();
     }
@@ -457,11 +569,307 @@ public partial class MainWindow : Window
         quit.Click += (_, _) => Application.Current.Shutdown();
 
         var menu = new ContextMenu();
+        menu.Items.Add(BuildCharacterMenu());
+        menu.Items.Add(BuildMainProviderMenu());
+        menu.Items.Add(new Separator());
         menu.Items.Add(_lockItem);
         menu.Items.Add(hide);
         menu.Items.Add(new Separator());
         menu.Items.Add(quit);
         return menu;
+    }
+
+    private MenuItem BuildCharacterMenu()
+    {
+        var root = new MenuItem { Header = "캐릭터" };
+        foreach (var (pet, label) in new[]
+                 {
+                     (PetCharacter.PixelCharmander, "픽셀 파이리 (진화형)"),
+                     (PetCharacter.PixelPikachu, "픽셀 피카츄"),
+                     (PetCharacter.PixelBulbasaur, "픽셀 이상해씨 (진화형)"),
+                     (PetCharacter.PixelSquirtle, "픽셀 꼬부기 (진화형)"),
+                     (PetCharacter.Clawd, "Clawd (게)"),
+                     (PetCharacter.Ditto, "메타몽"),
+                     (PetCharacter.Snorlax, "잠만보"),
+                 })
+        {
+            if (!PokemonSpriteAtlas.IsAvailable(pet)) continue;
+
+            var item = new MenuItem { Header = label, IsCheckable = true };
+            _characterItems[pet] = item;
+            item.Click += (_, _) => SetCharacter(pet);
+            root.Items.Add(item);
+        }
+        return root;
+    }
+
+    private void SetCharacter(PetCharacter pet)
+    {
+        if (!PokemonSpriteAtlas.IsAvailable(pet)) return;
+
+        _activePet = pet;
+        _settings.Character = pet.ToString();
+        _settings.Save();
+        ApplyCharacter();
+        RefreshMenus();
+    }
+
+    /// Swaps which sprite is on screen. The window is sized for the taller of
+    /// the two, so switching never needs a resize.
+    private void ApplyCharacter()
+    {
+        var pet = _activePet;
+        var pokemon = PixelEvolution.IsPokemon(pet);
+        var crab = pet == PetCharacter.Clawd;
+
+        PokemonPet.Visibility = pokemon ? Visibility.Visible : Visibility.Collapsed;
+        ClawdPet.Visibility = crab ? Visibility.Visible : Visibility.Collapsed;
+
+        // The hover panel shows the same pet as the taskbar, and the stage bar
+        // only appears for Pokemon families that evolve.
+        PanelPokemon.Visibility = PokemonPet.Visibility;
+        PanelClawdCrab.Visibility = ClawdPet.Visibility;
+        GrowthPanel.Visibility = PixelEvolution.Evolves(pet)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        if (pokemon)
+        {
+            PokemonPet.Character = pet;
+            PokemonPet.Stage = _stage;
+            PanelPokemon.Character = pet;
+            PanelPokemon.Stage = _stage;
+        }
+        CharacterNameText.Text = pokemon
+            ? PixelEvolution.Name(pet, _stage)
+            : "Clawd";
+        if (PixelEvolution.Evolves(pet)) ApplyGrowth();
+        ApplyWindowHeight();
+
+        foreach (var (key, item) in _characterItems) item.IsChecked = key == pet;
+    }
+
+    private MenuItem BuildMainProviderMenu()
+    {
+        var root = new MenuItem { Header = "메인 AI" };
+        foreach (var (provider, label) in new[]
+                 {
+                     (AiProvider.Claude, "Claude"),
+                     (AiProvider.Codex, "GPT / Codex"),
+                 })
+        {
+            var item = new MenuItem { Header = label, IsCheckable = true };
+            _mainProviderItems[provider] = item;
+            item.Click += (_, _) => SetMainProvider(provider);
+            root.Items.Add(item);
+        }
+        return root;
+    }
+
+    private void MainProvider_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement element && ProviderFromTag(element.Tag) is { } provider)
+            SetMainProvider(provider);
+    }
+
+    private void SetMainProvider(AiProvider provider)
+    {
+        _settings.MainProvider = provider.ToString();
+        _settings.Save();
+
+        ApplyProviderPreferences();
+        ApplyModel();
+
+        _lastInteraction = _clock.Elapsed.TotalSeconds;
+        SetResting(false);
+    }
+
+    private void ApplyProviderPreferences()
+    {
+        var provider = _settings.PrimaryProvider;
+        ClaudeMainOption.IsChecked = provider == AiProvider.Claude;
+        CodexMainOption.IsChecked = provider == AiProvider.Codex;
+        ClaudeMainBadge.Visibility = provider == AiProvider.Claude
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        CodexMainBadge.Visibility = provider == AiProvider.Codex
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        MainProviderText.Text = provider == AiProvider.Claude ? "CLAUDE" : "GPT";
+
+        foreach (var (key, item) in _mainProviderItems)
+            item.IsChecked = key == provider;
+    }
+
+    // MARK: Provider card order
+
+    private static AiProvider? ProviderFromTag(object? tag) =>
+        tag is string value && Enum.TryParse<AiProvider>(value, ignoreCase: true, out var provider)
+            ? provider
+            : null;
+
+    private Border CardFor(AiProvider provider) => provider switch
+    {
+        AiProvider.Codex => CodexCard,
+        _ => ClaudeCard,
+    };
+
+    private void ApplyCardOrder()
+    {
+        var order = _settings.OrderedProviders;
+        CardHost.Children.Clear();
+        for (var i = 0; i < order.Count; i++)
+        {
+            var card = CardFor(order[i]);
+            card.Margin = i < order.Count - 1
+                ? new Thickness(0, 0, 0, 7)
+                : new Thickness(0);
+            CardHost.Children.Add(card);
+        }
+    }
+
+    private void SaveCardOrder(IReadOnlyList<AiProvider> order)
+    {
+        _settings.SetCardOrder(order);
+        _settings.Save();
+        ApplyCardOrder();
+
+        if (_expanded)
+        {
+            UpdateLayout();
+            FitToPanel();
+            ApplyPlacement();
+        }
+    }
+
+    private void CardHandle_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not UIElement handle || sender is not FrameworkElement element) return;
+        if (ProviderFromTag(element.Tag) is not { } provider) return;
+
+        _draggedProvider = provider;
+        _cardDragStart = e.GetPosition(this);
+        _cardDragHandle = handle;
+        handle.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void CardHandle_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        CancelCardDrag();
+        e.Handled = true;
+    }
+
+    private void CardHandle_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_draggedProvider is not { } provider || e.LeftButton != MouseButtonState.Pressed)
+        {
+            CancelCardDrag();
+            return;
+        }
+
+        var point = e.GetPosition(this);
+        if (Math.Abs(point.X - _cardDragStart.X) < SystemParameters.MinimumHorizontalDragDistance
+            && Math.Abs(point.Y - _cardDragStart.Y) < SystemParameters.MinimumVerticalDragDistance)
+            return;
+
+        var handle = _cardDragHandle ?? sender as UIElement;
+        handle?.ReleaseMouseCapture();
+        _cardDragHandle = null;
+
+        var data = new DataObject();
+        data.SetData(ProviderDragFormat, provider.ToString());
+        try
+        {
+            DragDrop.DoDragDrop(handle ?? this, data, DragDropEffects.Move);
+        }
+        finally
+        {
+            _draggedProvider = null;
+            SetCardDragTarget(null);
+        }
+        e.Handled = true;
+    }
+
+    private void CancelCardDrag()
+    {
+        _cardDragHandle?.ReleaseMouseCapture();
+        _cardDragHandle = null;
+        _draggedProvider = null;
+        SetCardDragTarget(null);
+    }
+
+    private static AiProvider? ProviderFromDrag(DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(ProviderDragFormat)) return null;
+        return e.Data.GetData(ProviderDragFormat) is string value
+               && Enum.TryParse<AiProvider>(value, ignoreCase: true, out var provider)
+            ? provider
+            : null;
+    }
+
+    private void ProviderCard_DragEnter(object sender, DragEventArgs e)
+    {
+        if (sender is Border card && ProviderFromDrag(e) is not null)
+            SetCardDragTarget(card);
+    }
+
+    private void ProviderCard_DragLeave(object sender, DragEventArgs e)
+    {
+        if (ReferenceEquals(sender, _cardDragTarget)) SetCardDragTarget(null);
+    }
+
+    private void ProviderCard_DragOver(object sender, DragEventArgs e)
+    {
+        var source = ProviderFromDrag(e);
+        var target = sender is FrameworkElement element ? ProviderFromTag(element.Tag) : null;
+        e.Effects = source is not null && target is not null && source != target
+            ? DragDropEffects.Move
+            : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void ProviderCard_Drop(object sender, DragEventArgs e)
+    {
+        var source = ProviderFromDrag(e);
+        var target = sender is FrameworkElement element ? ProviderFromTag(element.Tag) : null;
+        if (source is { } from && target is { } to && from != to)
+        {
+            var order = _settings.OrderedProviders.ToList();
+            var sourceIndex = order.IndexOf(from);
+            var targetIndex = order.IndexOf(to);
+            (order[sourceIndex], order[targetIndex]) = (order[targetIndex], order[sourceIndex]);
+            SaveCardOrder(order);
+        }
+
+        SetCardDragTarget(null);
+        e.Handled = true;
+    }
+
+    private void CardHost_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = ProviderFromDrag(e) is null ? DragDropEffects.None : DragDropEffects.Move;
+        e.Handled = true;
+    }
+
+    private void CardHost_Drop(object sender, DragEventArgs e)
+    {
+        if (ProviderFromDrag(e) is { } provider)
+        {
+            var order = _settings.OrderedProviders.Where(item => item != provider).ToList();
+            order.Add(provider);
+            SaveCardOrder(order);
+        }
+        SetCardDragTarget(null);
+        e.Handled = true;
+    }
+
+    private void SetCardDragTarget(Border? target)
+    {
+        if (_cardDragTarget is not null)
+            _cardDragTarget.BorderBrush = Brushes.Transparent;
+        _cardDragTarget = target;
+        if (_cardDragTarget is not null)
+            _cardDragTarget.BorderBrush = new SolidColorBrush(Color.FromArgb(0x88, 255, 255, 255));
     }
 
     /// The tray menu mirrors these toggles, so both have to be told.
@@ -475,15 +883,39 @@ public partial class MainWindow : Window
 
     // MARK: Binding
 
+    /// The growth bar tracks lifetime usage, so unlike every other row here it
+    /// only ever fills — a window reset doesn't walk it back.
+    private void ApplyGrowth()
+    {
+        if (!PixelEvolution.Evolves(_activePet)) return;
+
+        var points = _model.CumulativeUsagePoints;
+        var (fraction, remaining) = PixelEvolution.Progress(points);
+
+        CharacterNameText.Text = PixelEvolution.Name(_activePet, _stage);
+        StageText.Text = $"누적 {points:N0}";
+        StageProgressText.Text = _stage == Stage.Charizard
+            ? "최종 진화"
+            : $"다음 진화까지 {remaining:N0}";
+
+        // The track is the parent Border; width is only known once laid out.
+        if (StageBar.Parent is FrameworkElement track && track.ActualWidth > 0)
+            StageBar.Width = track.ActualWidth * fraction;
+    }
+
     private void ApplyModel()
     {
-        PercentText.Text = _model.ClaudePercentText;
-        PercentText.Foreground = _model.ClaudePercentBrush;
+        var provider = _settings.PrimaryProvider;
+        PercentText.Text = _model.PercentTextFor(provider);
+        PercentText.Foreground = _model.PercentBrushFor(provider);
+        MainProviderText.Text = provider == AiProvider.Claude ? "CLAUDE" : "GPT";
 
         UpdatedText.Text = _model.LastUpdatedText;
         ClaudePhrase.Text = _model.ClaudePhrase;
         CodexPhrase.Text = _model.CodexPhrase;
         CodexTitleText.Text = _model.CodexTitle;
+
+        ApplyGrowth();
 
         SetError(ClaudeErrorText, _model.ClaudeError);
         SetError(CodexErrorText, _model.CodexError);
