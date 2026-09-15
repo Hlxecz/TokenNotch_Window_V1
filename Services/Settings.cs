@@ -42,9 +42,17 @@ public sealed class Settings
     /// Purely cosmetic (drives the evolution stage); not a real usage figure.
     public double CumulativeUsagePoints { get; set; }
 
+    /// Allows old 1%-equals-1-point saves to be upgraded once when the faster
+    /// experience scale changes.
+    public int ExperienceScaleVersion { get; set; }
+
     /// Which pet is on screen. Stored as a string so an unknown value from a
     /// newer build degrades to the default instead of throwing.
     public string Character { get; set; } = nameof(PetCharacter.Clawd);
+
+    /// "Auto" follows cumulative usage. A stage name keeps an unlocked
+    /// evolution family on that form until the user switches it again.
+    public string EvolutionStage { get; set; } = "Auto";
 
     /// The provider whose live usage drives the always-visible widget.
     public string MainProvider { get; set; } = nameof(AiProvider.Claude);
@@ -59,6 +67,12 @@ public sealed class Settings
         Enum.TryParse<PetCharacter>(Character, ignoreCase: true, out var pet)
             ? pet
             : PetCharacter.Clawd;
+
+    [JsonIgnore]
+    public Stage? PreferredEvolutionStage =>
+        Enum.TryParse<Stage>(EvolutionStage, ignoreCase: true, out var stage)
+            ? stage
+            : null;
 
     [JsonIgnore]
     public AiProvider PrimaryProvider =>

@@ -6,6 +6,8 @@ namespace TokenNotchWin;
 
 public sealed class UsageViewModel : INotifyPropertyChanged
 {
+    public const double ExperienceMultiplier = 10;
+
     private ClaudeUsage? _claude;
     private CodexUsage? _codex;
     private string? _claudeError;
@@ -47,7 +49,8 @@ public sealed class UsageViewModel : INotifyPropertyChanged
         {
             // A drop means the window rolled over; the usage since that reset
             // is whatever the new reading already shows.
-            var gained = now >= previous ? now - previous : now;
+            var utilizationGain = now >= previous ? now - previous : now;
+            var gained = utilizationGain * ExperienceMultiplier;
             if (gained > 0)
             {
                 CumulativeUsagePoints += gained;

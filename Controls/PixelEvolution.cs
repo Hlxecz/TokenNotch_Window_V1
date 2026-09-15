@@ -25,8 +25,8 @@ public enum PokemonSpecies
 
 public static class PixelEvolution
 {
-    public const double CharmeleonAt = 1000;
-    public const double CharizardAt = 4000;
+    public const double CharmeleonAt = 100;
+    public const double CharizardAt = 300;
 
     public static Stage StageFor(double points) => points switch
     {

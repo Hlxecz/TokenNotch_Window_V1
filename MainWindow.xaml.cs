@@ -54,6 +54,9 @@ public partial class MainWindow : Window
 
     private readonly Dictionary<PetCharacter, MenuItem> _characterItems = new();
     private readonly Dictionary<AiProvider, MenuItem> _mainProviderItems = new();
+    private readonly Dictionary<Stage, MenuItem> _stageItems = new();
+    private MenuItem? _stageMenu;
+    private MenuItem? _autoStageItem;
 
     private const string ProviderDragFormat = "TokenNotchWin.AiProvider";
     private Point _cardDragStart;
@@ -69,8 +72,20 @@ public partial class MainWindow : Window
             ? _settings.Pet
             : PetCharacter.Clawd;
 
+        if (_settings.ExperienceScaleVersion < 2)
+        {
+            _settings.CumulativeUsagePoints = _settings.ExperienceScaleVersion switch
+            {
+                < 1 => _settings.CumulativeUsagePoints * UsageViewModel.ExperienceMultiplier,
+                1 => _settings.CumulativeUsagePoints / 2,
+                _ => _settings.CumulativeUsagePoints,
+            };
+            _settings.ExperienceScaleVersion = 2;
+            _settings.Save();
+        }
+
         _model = new UsageViewModel(_settings.CumulativeUsagePoints);
-        _stage = _model.Stage;
+        _stage = SelectedStageFor(_model.Stage);
         // Preview a stage without accumulating usage. Preview mode also keeps
         // the pet awake so the idle tint does not obscure the selected stage.
         if (Environment.GetEnvironmentVariable("TOKENNOTCH_STAGE") is { } s
@@ -108,12 +123,14 @@ public partial class MainWindow : Window
         _settings.CumulativeUsagePoints = points;
         _settings.Save();
 
-        var stage = _model.Stage;
+        var stage = _previewStage ? _stage : SelectedStageFor(_model.Stage);
         if (stage != _stage)
         {
             _stage = stage;
             _evolveUntil = _clock.Elapsed.TotalSeconds + EvolveFlashSeconds;
+            ApplyCharacter();
         }
+        RefreshMenus();
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -570,12 +587,14 @@ public partial class MainWindow : Window
 
         var menu = new ContextMenu();
         menu.Items.Add(BuildCharacterMenu());
+        menu.Items.Add(BuildEvolutionMenu());
         menu.Items.Add(BuildMainProviderMenu());
         menu.Items.Add(new Separator());
         menu.Items.Add(_lockItem);
         menu.Items.Add(hide);
         menu.Items.Add(new Separator());
         menu.Items.Add(quit);
+        menu.Opened += (_, _) => RefreshMenus();
         return menu;
     }
 
@@ -601,6 +620,43 @@ public partial class MainWindow : Window
             root.Items.Add(item);
         }
         return root;
+    }
+
+    private MenuItem BuildEvolutionMenu()
+    {
+        _stageMenu = new MenuItem { Header = "진화 단계" };
+        _autoStageItem = new MenuItem { Header = "자동 (누적 사용량)", IsCheckable = true };
+        _autoStageItem.Click += (_, _) => SetEvolutionStage(null);
+        _stageMenu.Items.Add(_autoStageItem);
+        _stageMenu.Items.Add(new Separator());
+
+        foreach (var stage in Enum.GetValues<Stage>())
+        {
+            var item = new MenuItem { IsCheckable = true };
+            _stageItems[stage] = item;
+            item.Click += (_, _) => SetEvolutionStage(stage);
+            _stageMenu.Items.Add(item);
+        }
+        return _stageMenu;
+    }
+
+    private Stage SelectedStageFor(Stage unlocked)
+    {
+        var preferred = _settings.PreferredEvolutionStage;
+        return preferred is { } stage && stage <= unlocked ? stage : unlocked;
+    }
+
+    private void SetEvolutionStage(Stage? stage)
+    {
+        if (!PixelEvolution.Evolves(_activePet)) return;
+        if (stage is { } selected && selected > _model.Stage) return;
+
+        _settings.EvolutionStage = stage?.ToString() ?? "Auto";
+        _settings.Save();
+        _stage = SelectedStageFor(_model.Stage);
+        _evolveUntil = _clock.Elapsed.TotalSeconds + EvolveFlashSeconds;
+        ApplyCharacter();
+        RefreshMenus();
     }
 
     private void SetCharacter(PetCharacter pet)
@@ -878,6 +934,18 @@ public partial class MainWindow : Window
     private void RefreshMenus()
     {
         _lockItem.IsChecked = _settings.Locked;
+        var evolves = PixelEvolution.Evolves(_activePet);
+        if (_stageMenu is not null) _stageMenu.Visibility = evolves ? Visibility.Visible : Visibility.Collapsed;
+        if (_autoStageItem is not null)
+            _autoStageItem.IsChecked = _settings.PreferredEvolutionStage is null;
+        foreach (var (stage, item) in _stageItems)
+        {
+            item.Header = evolves
+                ? $"{(int)stage + 1}단계 · {PixelEvolution.Name(_activePet, stage)}"
+                : $"{(int)stage + 1}단계";
+            item.IsEnabled = stage <= _model.Stage;
+            item.IsChecked = _settings.PreferredEvolutionStage == stage;
+        }
         MenuStateChanged?.Invoke();
     }
 
@@ -891,11 +959,14 @@ public partial class MainWindow : Window
 
         var points = _model.CumulativeUsagePoints;
         var (fraction, remaining) = PixelEvolution.Progress(points);
+        var unlockedStage = _model.Stage;
 
         CharacterNameText.Text = PixelEvolution.Name(_activePet, _stage);
         StageText.Text = $"누적 {points:N0}";
-        StageProgressText.Text = _stage == Stage.Charizard
-            ? "최종 진화"
+        StageProgressText.Text = unlockedStage == Stage.Charizard
+            ? _stage == unlockedStage
+                ? "최종 진화"
+                : $"{PixelEvolution.Name(_activePet, unlockedStage)} 선택 가능"
             : $"다음 진화까지 {remaining:N0}";
 
         // The track is the parent Border; width is only known once laid out.
