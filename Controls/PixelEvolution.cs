@@ -21,6 +21,15 @@ public enum PokemonSpecies
     Blastoise,
     Ditto,
     Snorlax,
+    Arceus,
+    Dialga,
+    Palkia,
+    Giratina,
+    Mewtwo,
+    Lugia,
+    Kyogre,
+    Groudon,
+    Rayquaza,
 }
 
 public static class PixelEvolution
@@ -48,7 +57,16 @@ public static class PixelEvolution
         PetCharacter.PixelBulbasaur or
         PetCharacter.PixelSquirtle or
         PetCharacter.Ditto or
-        PetCharacter.Snorlax;
+        PetCharacter.Snorlax or
+        PetCharacter.Arceus or
+        PetCharacter.Dialga or
+        PetCharacter.Palkia or
+        PetCharacter.Giratina or
+        PetCharacter.Mewtwo or
+        PetCharacter.Lugia or
+        PetCharacter.Kyogre or
+        PetCharacter.Groudon or
+        PetCharacter.Rayquaza;
 
     public static bool Evolves(PetCharacter pet) => pet is
         PetCharacter.PixelCharmander or
@@ -78,6 +96,15 @@ public static class PixelEvolution
         },
         PetCharacter.Ditto => PokemonSpecies.Ditto,
         PetCharacter.Snorlax => PokemonSpecies.Snorlax,
+        PetCharacter.Arceus => PokemonSpecies.Arceus,
+        PetCharacter.Dialga => PokemonSpecies.Dialga,
+        PetCharacter.Palkia => PokemonSpecies.Palkia,
+        PetCharacter.Giratina => PokemonSpecies.Giratina,
+        PetCharacter.Mewtwo => PokemonSpecies.Mewtwo,
+        PetCharacter.Lugia => PokemonSpecies.Lugia,
+        PetCharacter.Kyogre => PokemonSpecies.Kyogre,
+        PetCharacter.Groudon => PokemonSpecies.Groudon,
+        PetCharacter.Rayquaza => PokemonSpecies.Rayquaza,
         _ => throw new ArgumentOutOfRangeException(nameof(pet), pet, "Not a Pokemon pet."),
     };
 
@@ -94,7 +121,17 @@ public static class PixelEvolution
         PokemonSpecies.Wartortle => "어니부기",
         PokemonSpecies.Blastoise => "거북왕",
         PokemonSpecies.Ditto => "메타몽",
-        _ => "잠만보",
+        PokemonSpecies.Snorlax => "잠만보",
+        PokemonSpecies.Arceus => "아르세우스",
+        PokemonSpecies.Dialga => "디아루가",
+        PokemonSpecies.Palkia => "펄기아",
+        PokemonSpecies.Giratina => "기라티나",
+        PokemonSpecies.Mewtwo => "뮤츠",
+        PokemonSpecies.Lugia => "루기아",
+        PokemonSpecies.Kyogre => "가이오가",
+        PokemonSpecies.Groudon => "그란돈",
+        PokemonSpecies.Rayquaza => "레쿠쟈",
+        _ => throw new ArgumentOutOfRangeException(nameof(pet), pet, "Unknown Pokemon species."),
     };
 
     public static (double Fraction, double Remaining) Progress(double points)

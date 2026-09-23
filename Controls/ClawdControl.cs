@@ -39,6 +39,10 @@ public sealed class ClawdControl : FrameworkElement
         DependencyProperty.Register(nameof(ClosingProgress), typeof(double), typeof(ClawdControl),
             new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
 
+    public static readonly DependencyProperty SkillProgressProperty =
+        DependencyProperty.Register(nameof(SkillProgress), typeof(double), typeof(ClawdControl),
+            new FrameworkPropertyMetadata(-1.0, FrameworkPropertyMetadataOptions.AffectsRender));
+
     public Mood Mood
     {
         get => (Mood)GetValue(MoodProperty);
@@ -91,6 +95,12 @@ public sealed class ClawdControl : FrameworkElement
         set => SetValue(ClosingProgressProperty, value);
     }
 
+    public double SkillProgress
+    {
+        get => (double)GetValue(SkillProgressProperty);
+        set => SetValue(SkillProgressProperty, value);
+    }
+
     /// Seconds since the widget started; the host advances this each frame.
     public double Time { get; set; }
 
@@ -107,6 +117,8 @@ public sealed class ClawdControl : FrameworkElement
     private static readonly Brush EyeBrush = Freeze(new SolidColorBrush(Colors.Black));
     private static readonly Brush ShadowBrush = Freeze(new SolidColorBrush(Color.FromArgb(60, 0, 0, 0)));
     private static readonly Brush SweatBrush = Freeze(new SolidColorBrush(Color.FromRgb(102, 179, 255)));
+    private static readonly Brush SkillBrush = Freeze(new SolidColorBrush(Color.FromRgb(255, 112, 72)));
+    private static readonly Brush SkillCoreBrush = Freeze(new SolidColorBrush(Color.FromRgb(255, 236, 142)));
     private static readonly Typeface Typeface = new("Segoe UI");
 
     private static Brush Freeze(Brush brush)
@@ -247,6 +259,11 @@ public sealed class ClawdControl : FrameworkElement
 
     private void DrawEffects(DrawingContext dc, double t, double originX, double originY)
     {
+        if (SkillProgress >= 0)
+        {
+            DrawSkill(dc, originX, originY);
+            return;
+        }
         if (Grabbed)
         {
             DrawFluster(dc, t, originX, originY);
@@ -275,6 +292,31 @@ public sealed class ClawdControl : FrameworkElement
                 DrawSparkle(dc, t, originX, originY, 0.55);
                 break;
         }
+    }
+
+    private void DrawSkill(DrawingContext dc, double originX, double originY)
+    {
+        var progress = Math.Clamp(SkillProgress, 0, 1);
+        var direction = FacingRight ? 1.0 : -1.0;
+        var unit = Scale / 3;
+        var startX = originX + SpriteWidth / 2 + direction * SpriteWidth * 0.48;
+        var endX = FacingRight ? RenderSize.Width - 4 * unit : 4 * unit;
+        var y = originY + SpriteHeight * 0.43;
+        var travel = progress < 0.26 ? 0 : (progress - 0.26) / 0.74;
+        var x = startX + (endX - startX) * (1 - Math.Pow(1 - travel, 2));
+        var radius = (progress < 0.26 ? 1.8 + progress / 0.26 * 2.2 : 3.5 - travel) * unit;
+
+        for (var i = 1; i <= 3 && travel > 0; i++)
+        {
+            var size = Math.Max(0.8, radius * (0.55 - i * 0.1));
+            dc.DrawRectangle(SkillBrush, null, new Rect(
+                x - direction * i * 3 * unit - size / 2,
+                y - size / 2,
+                size,
+                size));
+        }
+        dc.DrawEllipse(SkillBrush, null, new Point(x, y), radius, radius);
+        dc.DrawEllipse(SkillCoreBrush, null, new Point(x, y), radius * 0.42, radius * 0.42);
     }
 
     private static readonly Brush ParasolCream = Freeze(new SolidColorBrush(Color.FromRgb(247, 238, 224)));
@@ -461,6 +503,7 @@ public sealed class ClawdControl : FrameworkElement
 
     private ClawdSprite.Pose CurrentPose(double t)
     {
+        if (SkillProgress >= 0) return ClawdSprite.Pose.ArmsUp;
         // Claws thrash far faster than any walking pose changes.
         if (Grabbed) return Math.Sin(t * 16) > 0 ? ClawdSprite.Pose.ArmsUp : ClawdSprite.Pose.Standing;
         if (Mood == Mood.Sleeping) return ClawdSprite.Pose.Standing;
@@ -475,6 +518,7 @@ public sealed class ClawdControl : FrameworkElement
 
     private bool EyesClosed(double t)
     {
+        if (SkillProgress >= 0) return false;
         if (Grabbed) return false; // too startled to blink
         if (Mood == Mood.Sleeping) return true;
         // Two detuned sines make blinks land irregularly instead of on a beat.
@@ -483,6 +527,8 @@ public sealed class ClawdControl : FrameworkElement
 
     private double Bob(double t)
     {
+        if (SkillProgress >= 0)
+            return Math.Sin(Math.Clamp(SkillProgress, 0, 1) * Math.PI) * 1.6 * Scale / 3;
         if (Grabbed) return 0; // the pointer, not the ground, sets its height
         if (Mood == Mood.Sleeping) return 0;
         // A slow, shallow breathing bob rather than the bouncy walk cycle.

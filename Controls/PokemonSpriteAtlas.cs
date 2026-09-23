@@ -183,6 +183,16 @@ internal sealed class PokemonSpriteAtlas
         PokemonSpecies.Wartortle => ("pixel-squirtle-evolution-actions", "wartortle"),
         PokemonSpecies.Blastoise => ("pixel-squirtle-evolution-actions", "blastoise"),
         PokemonSpecies.Ditto => ("pixel-ditto-actions", "ditto"),
-        _ => ("pixel-snorlax-actions", "snorlax"),
+        PokemonSpecies.Snorlax => ("pixel-snorlax-actions", "snorlax"),
+        PokemonSpecies.Arceus => ("pixel-legendary-actions", "arceus"),
+        PokemonSpecies.Dialga => ("pixel-legendary-actions", "dialga"),
+        PokemonSpecies.Palkia => ("pixel-legendary-actions", "palkia"),
+        PokemonSpecies.Giratina => ("pixel-legendary-actions", "giratina"),
+        PokemonSpecies.Mewtwo => ("pixel-legendary-actions", "mewtwo"),
+        PokemonSpecies.Lugia => ("pixel-legendary-actions", "lugia"),
+        PokemonSpecies.Kyogre => ("pixel-legendary-actions", "kyogre"),
+        PokemonSpecies.Groudon => ("pixel-legendary-actions", "groudon"),
+        PokemonSpecies.Rayquaza => ("pixel-legendary-actions", "rayquaza"),
+        _ => throw new ArgumentOutOfRangeException(nameof(species), species, "Unknown Pokemon species."),
     };
 }

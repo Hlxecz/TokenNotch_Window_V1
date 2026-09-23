@@ -26,6 +26,15 @@ CHARACTERS = {
     "0025": ("pikachu", "피카츄"),
     "0132": ("ditto", "메타몽"),
     "0143": ("snorlax", "잠만보"),
+    "0150": ("mewtwo", "뮤츠"),
+    "0249": ("lugia", "루기아"),
+    "0382": ("kyogre", "가이오가"),
+    "0383": ("groudon", "그란돈"),
+    "0384": ("rayquaza", "레쿠쟈"),
+    "0483": ("dialga", "디아루가"),
+    "0484": ("palkia", "펄기아"),
+    "0487": ("giratina", "기라티나"),
+    "0493": ("arceus", "아르세우스"),
 }
 
 # Rows match the existing TokenNotch action contract. PMD direction rows are
@@ -42,6 +51,9 @@ ACTIONS = [
     {"row": 8, "id": "review", "sources": ["Nod", "LookUp", "Rotate", "Idle"], "direction": 0, "frames": 6},
     {"row": 9, "id": "look-right", "sources": ["Idle"], "direction": 2, "frames": 8},
     {"row": 10, "id": "look-left", "sources": ["Idle"], "direction": 6, "frames": 8},
+    {"row": 11, "id": "evolve", "sources": ["Charge"], "direction": 0, "frames": 8},
+    {"row": 12, "id": "skill-right", "sources": ["Shoot", "Attack", "Swing", "Charge"], "direction": 2, "frames": 6},
+    {"row": 13, "id": "skill-left", "sources": ["Shoot", "Attack", "Swing", "Charge"], "direction": 6, "frames": 6},
 ]
 
 
@@ -196,8 +208,10 @@ def make_contact_sheet(
 
 
 def build_stage(project_dir: Path, output_root: Path, stage_id: str, scale: int) -> dict:
-    source_dir = next(project_dir.glob(f"{stage_id} *"))
+    source_dir = next(project_dir.glob(f"{stage_id} *"), project_dir / stage_id)
     animation_dir = source_dir / "Animations"
+    if not animation_dir.exists():
+        animation_dir = source_dir
     animations = parse_animations(animation_dir / "AnimData.xml")
     actions = [load_action(spec, animations, animation_dir) for spec in ACTIONS]
 

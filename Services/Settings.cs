@@ -15,6 +15,15 @@ public enum PetCharacter
     PixelSquirtle,
     Ditto,
     Snorlax,
+    Arceus,
+    Dialga,
+    Palkia,
+    Giratina,
+    Mewtwo,
+    Lugia,
+    Kyogre,
+    Groudon,
+    Rayquaza,
 }
 
 /// <summary>

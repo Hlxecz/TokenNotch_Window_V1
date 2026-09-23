@@ -1,0 +1,103 @@
+<Window x:Class="TokenNotchWin.CharacterPickerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="캐릭터 선택"
+        Width="456" Height="416"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        Topmost="True"
+        WindowStartupLocation="Manual"
+        KeyDown="Window_KeyDown">
+    <Window.Resources>
+        <Style x:Key="PetTileStyle" TargetType="Button">
+            <Setter Property="Width" Value="94"/>
+            <Setter Property="Height" Value="108"/>
+            <Setter Property="Margin" Value="3"/>
+            <Setter Property="Padding" Value="4"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="#12FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#18FFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Shell" CornerRadius="7"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Shell" Property="Background" Value="#28FFFFFF"/>
+                                <Setter TargetName="Shell" Property="BorderBrush" Value="#55FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Shell" Property="Background" Value="#3AFFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="CloseButtonStyle" TargetType="Button">
+            <Setter Property="Foreground" Value="#AAFFFFFF"/>
+            <Setter Property="Background" Value="#18FFFFFF"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Shell" CornerRadius="14"
+                                Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Shell" Property="Background" Value="#35FFFFFF"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border Margin="10" CornerRadius="8" Background="#FA1C1A1F"
+            BorderBrush="#35FFFFFF" BorderThickness="1" Padding="12">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="22" ShadowDepth="4" Opacity="0.65" Color="Black"/>
+        </Border.Effect>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <Grid Margin="2,0,2,10">
+                <StackPanel>
+                    <TextBlock Text="캐릭터 선택" FontFamily="Segoe UI" FontSize="16"
+                               FontWeight="SemiBold" Foreground="White"/>
+                    <TextBlock Text="함께 다닐 캐릭터를 골라주세요" Margin="0,2,0,0"
+                               FontFamily="Segoe UI" FontSize="10" Foreground="#88FFFFFF"/>
+                </StackPanel>
+                <Button Content="×" Width="28" Height="28" HorizontalAlignment="Right"
+                        VerticalAlignment="Top" FontFamily="Segoe UI" FontSize="17"
+                        Style="{StaticResource CloseButtonStyle}" Click="Close_Click"/>
+            </Grid>
+
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <WrapPanel x:Name="PetGrid" HorizontalAlignment="Center"/>
+            </ScrollViewer>
+        </Grid>
+    </Border>
+</Window>

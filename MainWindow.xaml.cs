@@ -18,8 +18,6 @@ public partial class MainWindow : Window
     private const double NeglectGraceSeconds = 60; // sitting calmly this long before it starts to "tan"
     private const double NeglectSpanSeconds = 20 * 60; // roughly four 5-min poll cycles to reach "please touch me"
 
-    private const double EvolveFlashSeconds = 2.2;
-
     private readonly Settings _settings = Settings.Load();
     private readonly UsageViewModel _model;
     private readonly Stopwatch _clock = Stopwatch.StartNew();
@@ -36,23 +34,28 @@ public partial class MainWindow : Window
     private const double StandUpSeconds = 0.55; // Clawd's parasol furls
 
     private bool _expanded;
+    private bool _pressPending;
     private bool _grabbed;
     private bool _falling;
     private bool _resting;
     private double _closing; // 0..1 through the stand-up animation
     private double _fallVelocity;
     private double _grabDx, _grabDy;
+    private Point _pressScreenPoint;
     private double _lastInteraction;
     private double _restStartedAt;
 
     private Stage _stage;
-    private double _evolveUntil; // clock time the evolution flash ends
+    private Stage _evolveFromStage;
+    private double _evolveStartedAt = -1;
+    private double _evolveUntil;
+    private double _skillStartedAt = -1;
+    private double _skillUntil;
     private bool _previewStage; // True when TOKENNOTCH_STAGE forces a preview.
     private PetCharacter _activePet = PetCharacter.Clawd;
 
     private bool UsesPokemonRest => PixelEvolution.IsPokemon(_activePet);
 
-    private readonly Dictionary<PetCharacter, MenuItem> _characterItems = new();
     private readonly Dictionary<AiProvider, MenuItem> _mainProviderItems = new();
     private readonly Dictionary<Stage, MenuItem> _stageItems = new();
     private MenuItem? _stageMenu;
@@ -63,6 +66,7 @@ public partial class MainWindow : Window
     private AiProvider? _draggedProvider;
     private UIElement? _cardDragHandle;
     private Border? _cardDragTarget;
+    private CharacterPickerWindow? _characterPicker;
 
     public MainWindow()
     {
@@ -103,6 +107,7 @@ public partial class MainWindow : Window
         Loaded += OnLoaded;
 
         CharacterStrip.MouseLeftButtonDown += OnGrab;
+        CharacterStrip.MouseMove += OnCharacterMove;
         CharacterStrip.MouseLeftButtonUp += OnRelease;
         CharacterStrip.ContextMenu = BuildContextMenu();
         ApplyCharacter();
@@ -126,8 +131,8 @@ public partial class MainWindow : Window
         var stage = _previewStage ? _stage : SelectedStageFor(_model.Stage);
         if (stage != _stage)
         {
+            StartEvolution(_stage, stage);
             _stage = stage;
-            _evolveUntil = _clock.Elapsed.TotalSeconds + EvolveFlashSeconds;
             ApplyCharacter();
         }
         RefreshMenus();
@@ -159,27 +164,54 @@ public partial class MainWindow : Window
     private void OnGrab(object sender, MouseButtonEventArgs e)
     {
         var cursor = CursorScreenPoint();
+        _pressScreenPoint = cursor;
         _grabDx = _x - cursor.X;
         _grabDy = _bottomY - cursor.Y;
-        _grabbed = true;
-        _falling = false;
-        _fallVelocity = 0;
-        // Being yanked into the air skips the polite stand-up entirely.
+        _pressPending = true;
+        // A touch wakes the pet immediately. Actual dragging starts only after
+        // the pointer crosses the system drag threshold.
         _resting = false;
         _closing = 0;
         _lastInteraction = _clock.Elapsed.TotalSeconds;
 
-        SetExpanded(false);
         ApplyWindowHeight();
         CharacterStrip.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void OnCharacterMove(object sender, MouseEventArgs e)
+    {
+        if (!_pressPending || _grabbed || e.LeftButton != MouseButtonState.Pressed) return;
+
+        var cursor = CursorScreenPoint();
+        if (Math.Abs(cursor.X - _pressScreenPoint.X) < SystemParameters.MinimumHorizontalDragDistance
+            && Math.Abs(cursor.Y - _pressScreenPoint.Y) < SystemParameters.MinimumVerticalDragDistance)
+            return;
+
+        _grabbed = true;
+        _falling = false;
+        _fallVelocity = 0;
+        _skillStartedAt = -1;
+        _skillUntil = 0;
+        SetExpanded(false);
+        ApplyWindowHeight();
     }
 
     private void OnRelease(object sender, MouseButtonEventArgs e)
     {
-        if (!_grabbed) return;
+        if (!_pressPending && !_grabbed) return;
+        var wasDragged = _grabbed;
+        _pressPending = false;
         _grabbed = false;
         _lastInteraction = _clock.Elapsed.TotalSeconds;
         CharacterStrip.ReleaseMouseCapture();
+
+        if (!wasDragged)
+        {
+            TriggerSkill();
+            e.Handled = true;
+            return;
+        }
 
         var work = CurrentWorkArea();
         _x = Math.Clamp(_x, work.Left + Width / 2, work.Right - Width / 2);
@@ -199,6 +231,18 @@ public partial class MainWindow : Window
         {
             _bottomY = work.Bottom;
         }
+        ApplyWindowHeight();
+        e.Handled = true;
+    }
+
+    private void TriggerSkill()
+    {
+        var now = _clock.Elapsed.TotalSeconds;
+        _skillStartedAt = now;
+        _skillUntil = now + PokemonPetControl.SkillDurationSeconds;
+        _pauseUntil = _skillUntil + 0.15;
+        _resting = false;
+        _closing = 0;
         ApplyWindowHeight();
     }
 
@@ -234,14 +278,22 @@ public partial class MainWindow : Window
             ? Math.Clamp((idle - IdleRestSeconds - NeglectGraceSeconds) / NeglectSpanSeconds, 0, 1)
             : 0;
 
-        // Fades out over the flash window rather than cutting off, so the
-        // white wash and the burst retreat together.
-        var evolve = _evolveUntil > t ? (_evolveUntil - t) / EvolveFlashSeconds : 0;
+        var evolutionElapsed = _evolveUntil > t ? Math.Max(0, t - _evolveStartedAt) : -1;
+        var evolutionProgress = evolutionElapsed >= 0
+            ? Math.Clamp(evolutionElapsed / PokemonPetControl.EvolutionDurationSeconds, 0, 1)
+            : -1;
+        var evolveFlash = evolutionElapsed >= 0
+            ? 1 - Math.Clamp(Math.Abs(evolutionElapsed - PokemonPetControl.EvolutionChargeSeconds) / 0.24, 0, 1)
+            : 0;
+        var skillElapsed = _skillUntil > t ? Math.Max(0, t - _skillStartedAt) : -1;
+        var skillProgress = skillElapsed >= 0
+            ? Math.Clamp(skillElapsed / PokemonPetControl.SkillDurationSeconds, 0, 1)
+            : -1;
 
         var primaryMood = _model.MoodFor(_settings.PrimaryProvider);
         var pokemonMoving = !_settings.Locked && !_resting && !_expanded
                             && primaryMood != Mood.Sleeping && t >= _pauseUntil
-                            && !_grabbed && !_falling;
+                            && !_grabbed && !_falling && evolutionElapsed < 0 && skillElapsed < 0;
 
         if (ClawdPet.Visibility == Visibility.Visible)
         {
@@ -252,6 +304,7 @@ public partial class MainWindow : Window
             ClawdPet.Resting = _resting;
             ClawdPet.ClosingProgress = _closing;
             ClawdPet.NeglectFraction = neglect;
+            ClawdPet.SkillProgress = skillProgress;
             ClawdPet.InvalidateVisual();
         }
 
@@ -261,13 +314,17 @@ public partial class MainWindow : Window
             PokemonPet.RestElapsed = Math.Max(0, t - _restStartedAt);
             PokemonPet.Mood = primaryMood;
             PokemonPet.Character = _activePet;
-            PokemonPet.Stage = _stage;
+            PokemonPet.Stage = evolutionElapsed is >= 0 and < PokemonPetControl.EvolutionChargeSeconds
+                ? _evolveFromStage
+                : _stage;
             PokemonPet.FacingRight = _direction > 0;
             PokemonPet.Moving = pokemonMoving;
             PokemonPet.Grabbed = _grabbed;
             PokemonPet.Resting = _resting;
             PokemonPet.NeglectFraction = neglect;
-            PokemonPet.EvolveFlash = evolve;
+            PokemonPet.EvolveFlash = evolveFlash;
+            PokemonPet.EvolutionProgress = evolutionProgress;
+            PokemonPet.SkillProgress = skillProgress;
             PokemonPet.InvalidateVisual();
         }
 
@@ -282,7 +339,7 @@ public partial class MainWindow : Window
 
         if (_grabbed) Drag();
         else if (_falling) Fall(dt);
-        else Walk(t, dt);
+        else if (skillElapsed < 0) Walk(t, dt);
     }
 
     private void UpdateCharacterPanel(double t, Mood mood)
@@ -600,26 +657,32 @@ public partial class MainWindow : Window
 
     private MenuItem BuildCharacterMenu()
     {
-        var root = new MenuItem { Header = "캐릭터" };
-        foreach (var (pet, label) in new[]
-                 {
-                     (PetCharacter.PixelCharmander, "픽셀 파이리 (진화형)"),
-                     (PetCharacter.PixelPikachu, "픽셀 피카츄"),
-                     (PetCharacter.PixelBulbasaur, "픽셀 이상해씨 (진화형)"),
-                     (PetCharacter.PixelSquirtle, "픽셀 꼬부기 (진화형)"),
-                     (PetCharacter.Clawd, "Clawd (게)"),
-                     (PetCharacter.Ditto, "메타몽"),
-                     (PetCharacter.Snorlax, "잠만보"),
-                 })
-        {
-            if (!PokemonSpriteAtlas.IsAvailable(pet)) continue;
+        var item = new MenuItem { Header = "캐릭터 선택..." };
+        item.Click += (_, _) => OpenCharacterPicker();
+        return item;
+    }
 
-            var item = new MenuItem { Header = label, IsCheckable = true };
-            _characterItems[pet] = item;
-            item.Click += (_, _) => SetCharacter(pet);
-            root.Items.Add(item);
+    private void ChangeCharacter_Click(object sender, RoutedEventArgs e) => OpenCharacterPicker();
+
+    private void OpenCharacterPicker()
+    {
+        if (_characterPicker is not null)
+        {
+            _characterPicker.Activate();
+            return;
         }
-        return root;
+
+        SetExpanded(false);
+        var picker = new CharacterPickerWindow(_activePet, _stage) { Owner = this };
+        picker.CharacterSelected += SetCharacter;
+        picker.Closed += (_, _) => _characterPicker = null;
+        var work = CurrentWorkArea();
+        picker.Left = Math.Clamp(_x - picker.Width / 2,
+            work.Left + 10, work.Right - picker.Width - 10);
+        picker.Top = Math.Clamp(_bottomY - picker.Height - 12,
+            work.Top + 10, work.Bottom - picker.Height - 10);
+        _characterPicker = picker;
+        picker.Show();
     }
 
     private MenuItem BuildEvolutionMenu()
@@ -653,8 +716,9 @@ public partial class MainWindow : Window
 
         _settings.EvolutionStage = stage?.ToString() ?? "Auto";
         _settings.Save();
-        _stage = SelectedStageFor(_model.Stage);
-        _evolveUntil = _clock.Elapsed.TotalSeconds + EvolveFlashSeconds;
+        var selectedStage = SelectedStageFor(_model.Stage);
+        if (selectedStage != _stage) StartEvolution(_stage, selectedStage);
+        _stage = selectedStage;
         ApplyCharacter();
         RefreshMenus();
     }
@@ -663,11 +727,30 @@ public partial class MainWindow : Window
     {
         if (!PokemonSpriteAtlas.IsAvailable(pet)) return;
 
+        _evolveStartedAt = -1;
+        _evolveUntil = 0;
+        _skillStartedAt = -1;
+        _skillUntil = 0;
+        PokemonPet.EvolutionProgress = -1;
+        PokemonPet.SkillProgress = -1;
+        ClawdPet.SkillProgress = -1;
         _activePet = pet;
         _settings.Character = pet.ToString();
         _settings.Save();
         ApplyCharacter();
         RefreshMenus();
+    }
+
+    private void StartEvolution(Stage from, Stage to)
+    {
+        if (from == to || !PixelEvolution.Evolves(_activePet)) return;
+
+        var now = _clock.Elapsed.TotalSeconds;
+        _evolveFromStage = from;
+        _evolveStartedAt = now;
+        _evolveUntil = now + PokemonPetControl.EvolutionDurationSeconds;
+        _lastInteraction = now;
+        SetResting(false);
     }
 
     /// Swaps which sprite is on screen. The window is sized for the taller of
@@ -701,7 +784,6 @@ public partial class MainWindow : Window
         if (PixelEvolution.Evolves(pet)) ApplyGrowth();
         ApplyWindowHeight();
 
-        foreach (var (key, item) in _characterItems) item.IsChecked = key == pet;
     }
 
     private MenuItem BuildMainProviderMenu()
