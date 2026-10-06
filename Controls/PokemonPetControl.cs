@@ -114,7 +114,9 @@ public sealed class PokemonPetControl : FrameworkElement
                 ? EvolutionProgress * EvolutionDurationSeconds
                 : SkillProgress >= 0
                     ? SkillProgress * SkillDurationSeconds
-                    : Time;
+                    : Stationary
+                        ? 0
+                        : Time;
         var sprite = atlas.Frame(action, elapsed, holdLast: Resting || SkillProgress >= 0);
         var u = Math.Max(0.1, Scale);
         var width = atlas.CellWidth * u;
