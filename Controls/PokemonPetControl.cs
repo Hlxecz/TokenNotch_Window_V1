@@ -35,6 +35,10 @@ public sealed class PokemonPetControl : FrameworkElement
         DependencyProperty.Register(nameof(Moving), typeof(bool), typeof(PokemonPetControl),
             new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
 
+    public static readonly DependencyProperty StationaryProperty =
+        DependencyProperty.Register(nameof(Stationary), typeof(bool), typeof(PokemonPetControl),
+            new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
+
     public static readonly DependencyProperty ScaleProperty =
         DependencyProperty.Register(nameof(Scale), typeof(double), typeof(PokemonPetControl),
             new FrameworkPropertyMetadata(1.0, FrameworkPropertyMetadataOptions.AffectsMeasure
@@ -69,6 +73,7 @@ public sealed class PokemonPetControl : FrameworkElement
     public PetCharacter Character { get => (PetCharacter)GetValue(CharacterProperty); set => SetValue(CharacterProperty, value); }
     public bool FacingRight { get => (bool)GetValue(FacingRightProperty); set => SetValue(FacingRightProperty, value); }
     public bool Moving { get => (bool)GetValue(MovingProperty); set => SetValue(MovingProperty, value); }
+    public bool Stationary { get => (bool)GetValue(StationaryProperty); set => SetValue(StationaryProperty, value); }
     public double Scale { get => (double)GetValue(ScaleProperty); set => SetValue(ScaleProperty, value); }
     public bool Grabbed { get => (bool)GetValue(GrabbedProperty); set => SetValue(GrabbedProperty, value); }
     public bool Resting { get => (bool)GetValue(RestingProperty); set => SetValue(RestingProperty, value); }
@@ -150,6 +155,7 @@ public sealed class PokemonPetControl : FrameworkElement
         if (Resting) return "failed";
         if (Grabbed) return "jump";
         if (Moving) return FacingRight ? "walk-right" : "walk-left";
+        if (Stationary) return "idle";
         if (Mood is Mood.Worried or Mood.Critical) return "working";
         return "idle";
     }

@@ -319,6 +319,7 @@ public partial class MainWindow : Window
                 : _stage;
             PokemonPet.FacingRight = _direction > 0;
             PokemonPet.Moving = pokemonMoving;
+            PokemonPet.Stationary = _settings.Locked || _expanded;
             PokemonPet.Grabbed = _grabbed;
             PokemonPet.Resting = _resting;
             PokemonPet.NeglectFraction = neglect;
@@ -351,6 +352,7 @@ public partial class MainWindow : Window
             PanelPokemon.Character = _activePet;
             PanelPokemon.Stage = _stage;
             PanelPokemon.Moving = false;
+            PanelPokemon.Stationary = true;
             PanelPokemon.Resting = false;
             PanelPokemon.InvalidateVisual();
         }
